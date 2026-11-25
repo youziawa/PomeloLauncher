@@ -1,0 +1,29 @@
+{
+  "name": "pomelo-launcher-demo",
+  "private": true,
+  "version": "0.1.0-demo",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "core:test": "cargo test --manifest-path src-tauri/Cargo.toml --workspace",
+    "core:build": "cargo build --release --manifest-path src-tauri/Cargo.toml -p pomelo-cli",
+    "desktop:dev": "cd src-tauri/app && cargo tauri dev",
+    "desktop:build": "cd src-tauri/app && cargo tauri build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.1.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "skinview3d": "^3.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vite-plugin-singlefile": "^2.0.3"
+  }
+}

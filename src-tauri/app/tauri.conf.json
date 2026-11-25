@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "PomeloLauncher",
+  "version": "0.1.0",
+  "identifier": "com.pomeloworks.launcher",
+  "build": {
+    "frontendDist": "../../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "PomeloLauncher",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 980,
+        "minHeight": 640,
+        "resizable": true,
+        "decorations": false,
+        "transparent": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "category": "Utility",
+    "shortDescription": "轻量、清新、功能全面的 Minecraft 启动器",
+    "longDescription": "PomeloLauncher（柚子启动器）：Apache-2.0 开源，Tauri 2 + Rust 核心，支持实例隔离、镜像下载、崩溃诊断与深度链接。"
+  }
+}

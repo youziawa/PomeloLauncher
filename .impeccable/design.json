@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "world": "Pomelo Garden（清新柚园）",
+  "source": "docs/项目企划书.md §6（brief-pinned）+ DESIGN.md",
+  "mode": "operate",
+  "tokens": {
+    "color": {
+      "light": {
+        "primary": "#7BA23F", "on-primary": "#1F2616", "accent": "#F2C14E",
+        "bg": "#FAF9F4", "surface": "#FFFFFF", "surface-2": "#F3F2EA",
+        "text": "#2B2E26", "muted": "#6E7266", "border": "#E5E3D8",
+        "danger": "#C4453F", "warning": "#9A6B12", "success": "#3E7D3E", "info": "#3A72B0"
+      },
+      "dark": {
+        "primary": "#A8C66C", "on-primary": "#191C16", "accent": "#E8B84B",
+        "bg": "#191C16", "surface": "#232720", "surface-2": "#1F231C",
+        "text": "#E8EAE3", "muted": "#9BA093", "border": "#3A4034",
+        "danger": "#E57368", "warning": "#E0B050", "success": "#7FBF7F", "info": "#7FB2E5"
+      },
+      "accents": ["green", "blue", "orange", "pink", "purple", "teal", "graphite", "yellow"]
+    },
+    "radius": { "card": 14, "control": 10, "chip": 8 },
+    "spacing": { "grid": 4, "page": 24, "gap": 16 },
+    "type": {
+      "family": "MiSans, HarmonyOS Sans, system-ui, PingFang SC, Microsoft YaHei, sans-serif",
+      "mono": "Consolas, JetBrains Mono, monospace",
+      "base": 14, "scale": [12, 13, 14, 16, 18, 22]
+    },
+    "motion": { "duration": [160, 240], "easing": "cubic-bezier(0.2, 0, 0, 1)", "globalOffSwitch": true }
+  },
+  "signature": "首页启动流水线（Pre-flight 清单 → 进度+日志 → 运行态）与 CSS 3D 皮肤预览",
+  "implementation": "src/styles.css（令牌）+ src/ui.tsx（组件）",
+  "verified": "2026-11-26 DOM 几何 + 交互走查 + impeccable detect（0 findings）"
+}

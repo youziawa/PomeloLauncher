@@ -1,0 +1,18 @@
+[package]
+name = "pomelo-downloader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "PomeloLauncher 下载引擎：镜像重写 / 并发下载 / SHA1 校验 / natives 解压"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+sha1 = { workspace = true }
+hex = { workspace = true }
+zip = { workspace = true }
+tracing = { workspace = true }
