@@ -103,6 +103,25 @@ export function AddAccountModal() {
   }, [msStep]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const steps = ['等待授权（手机扫码或输入设备码）', '获取 Xbox Live / Minecraft 令牌', '获取游戏档案（UUID + 皮肤）']
+
+  if (app.desktop) {
+    return (
+      <Modal title="添加账户" onClose={app.closeModal}>
+        <p className="muted small" style={{ marginBottom: 12 }}>
+          桌面版当前支持离线账户启动；Microsoft 正版登录与皮肤站将在下个里程碑接入。
+        </p>
+        <div className="field" style={{ marginBottom: 12 }}>
+          <label>游戏昵称</label>
+          <input className="input" value={nick} onChange={e => setNick(e.target.value)} maxLength={16} placeholder="3–16 个字符" />
+          <span className="hint">离线模式无法进入启用正版验证的服务器；皮肤可本地自定义。</span>
+        </div>
+        <button className="btn primary block" disabled={nick.trim().length < 3}
+          onClick={() => { app.addAccount({ id: uid('a'), name: nick.trim(), kind: 'offline', skin: 'pomelo' }); app.closeModal() }}>
+          创建离线账户
+        </button>
+      </Modal>
+    )
+  }
   return (
     <Modal title="添加账户" onClose={app.closeModal}>
       <div className="tabs" style={{ marginBottom: 16 }}>

@@ -9,7 +9,7 @@ import Downloads from './pages/Downloads'
 import Accounts, { AddAccountModal } from './pages/Accounts'
 import Settings from './pages/Settings'
 import { Wizard, CrashModal, NewInstanceModal, InstallModal } from './overlays'
-import { isDesktop, windowClose, windowMinimize, windowToggleMaximize } from './desktop'
+import { isDesktop, windowClose, windowMinimize, windowStartDragging, windowToggleMaximize } from './desktop'
 
 const NAV: { key: Page; label: string; icon: string }[] = [
   { key: 'home', label: '首页', icon: 'home' },
@@ -55,10 +55,17 @@ function Shell() {
     <div className="desktop">
       <div className={`window ${maximized ? 'maximized' : ''}`}>
         {/* 自定义标题栏 */}
-        <div className="titlebar" data-tauri-drag-region>
-          <span className="logo"><Logo />PomeloLauncher</span>
-          <span className="demo-badge">{isDesktop() ? 'DESKTOP · 桌面版' : 'DEMO · 演示数据'}</span>
-          <span className="spacer" />
+        <div className="titlebar" data-tauri-drag-region
+          onMouseDown={e => {
+            if (!isDesktop() || e.button !== 0) return
+            const t = e.target as HTMLElement
+            if (t.closest('.winbtns') || t.closest('button') || t.closest('a') || t.closest('input')) return
+            void windowStartDragging()
+          }}
+          onDoubleClick={() => { if (isDesktop()) void windowToggleMaximize() }}>
+          <span className="logo" data-tauri-drag-region><Logo />PomeloLauncher</span>
+          <span className="demo-badge" data-tauri-drag-region>{isDesktop() ? 'DESKTOP · 桌面版' : 'DEMO · 演示数据'}</span>
+          <span className="spacer" data-tauri-drag-region />
           <div className="winbtns">
             <button className="winbtn" aria-label="最小化" onClick={() => isDesktop() ? void windowMinimize() : app.toast('演示模式：窗口不会真的最小化')}><Icon name="minimize" size={14} /></button>
             <button className="winbtn" aria-label="最大化" onClick={() => isDesktop() ? void windowToggleMaximize() : setMaximized(v => !v)}><Icon name="maximize" size={14} /></button>

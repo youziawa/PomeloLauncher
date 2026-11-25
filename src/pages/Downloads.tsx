@@ -25,9 +25,13 @@ export default function Downloads() {
         <div className="stat"><b className="num">{totalSpeed.toFixed(1)} MB/s</b><span>总速度</span></div>
         <div className="stat"><b className="num">{done.length}</b><span>已完成</span></div>
         <span className="grow" style={{ flex: 1 }} />
-        <button className="btn ghost sm" onClick={app.pauseAll} disabled={active.length === 0}><Icon name="pause" size={14} />全部暂停</button>
-        <button className="btn ghost sm" onClick={app.resumeAll} disabled={!hasPaused}><Icon name="play" size={14} />全部继续</button>
-        <button className="btn quiet sm" onClick={app.clearDone} disabled={done.length === 0}><Icon name="trash" size={14} />清除已完成</button>
+        {!app.desktop && (
+          <>
+            <button className="btn ghost sm" onClick={app.pauseAll} disabled={active.length === 0}><Icon name="pause" size={14} />全部暂停</button>
+            <button className="btn ghost sm" onClick={app.resumeAll} disabled={!hasPaused}><Icon name="play" size={14} />全部继续</button>
+            <button className="btn quiet sm" onClick={app.clearDone} disabled={done.length === 0}><Icon name="trash" size={14} />清除已完成</button>
+          </>
+        )}
       </div>
       <div className="card list-card">
         {dls.length === 0 ? (
@@ -58,10 +62,10 @@ export default function Downloads() {
               )}
             </div>
             <div className="ops">
-              {d.status === 'downloading' && <button className="iconbtn" onClick={() => app.dlOp(d.id, 'pause')} aria-label="暂停"><Icon name="pause" /></button>}
-              {d.status === 'paused' && <button className="iconbtn" onClick={() => app.dlOp(d.id, 'resume')} aria-label="继续"><Icon name="play" /></button>}
-              {d.status === 'error' && <button className="iconbtn" onClick={() => app.dlOp(d.id, 'retry')} aria-label="重试"><Icon name="refresh" /></button>}
-              {d.status !== 'done' && <button className="iconbtn danger" onClick={() => app.dlOp(d.id, 'cancel')} aria-label="取消"><Icon name="x" /></button>}
+              {!d.id.startsWith('real-') && d.status === 'downloading' && <button className="iconbtn" onClick={() => app.dlOp(d.id, 'pause')} aria-label="暂停"><Icon name="pause" /></button>}
+              {!d.id.startsWith('real-') && d.status === 'paused' && <button className="iconbtn" onClick={() => app.dlOp(d.id, 'resume')} aria-label="继续"><Icon name="play" /></button>}
+              {!d.id.startsWith('real-') && d.status === 'error' && <button className="iconbtn" onClick={() => app.dlOp(d.id, 'retry')} aria-label="重试"><Icon name="refresh" /></button>}
+              {!d.id.startsWith('real-') && d.status !== 'done' && <button className="iconbtn danger" onClick={() => app.dlOp(d.id, 'cancel')} aria-label="取消"><Icon name="x" /></button>}
             </div>
           </div>
         ))}

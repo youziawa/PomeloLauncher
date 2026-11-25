@@ -1,11 +1,19 @@
-/* PomeloLauncher DEMO — 全局状态与模拟器（启动流水线 / 下载引擎） */
+/* PomeloLauncher — 全局状态：浏览器演示（mock）与桌面真实核心（Tauri IPC）双模式 */
 import React, { createContext, useContext, useEffect, useReducer, useState, useCallback } from 'react'
 import {
-  Instance, Account, Mod, PackItem, Server, Save, ResourceItem, DownloadTask, LogLine,
+  Instance, Account, Mod, PackItem, Server, Save, ResourceItem, DownloadTask, LogLine, IconKind,
   initialInstances, initialAccounts, initialMods, initialPacks, initialServers, initialSaves,
   initialDownloads, PREFLIGHT_CHECKS, LAUNCH_MILESTONES, AMBIENT_LOGS, CRASH_LINES, CRASH_INFO,
   uid, nowTime, TagColor, LoaderType,
 } from './mock'
+import {
+  isDesktop, getSystemInfo, listInstances as listDesktopInstances, listAccounts as listDesktopAccounts,
+  addOfflineAccount, removeAccount as removeDesktopAccount, installInstance as installDesktopInstance,
+  launchInstance as launchDesktopInstance, stopGame as stopDesktopGame, onInstallProgress, onGameExit,
+  updateInstance as updateDesktopInstance, listVersions,
+  createInstance as createDesktopInstance,
+  DesktopInstance, DesktopAccount,
+} from './desktop'
 
 export type Page = 'home' | 'instances' | 'resources' | 'downloads' | 'accounts' | 'settings'
 
@@ -188,6 +196,9 @@ interface Ctx {
   toggleFavorite: (id: string) => void
   updateInstance: (id: string, patch: Partial<Instance>) => void
   logsFor: (instId: string) => LogLine[]
+  desktop: boolean
+  versionOptions: string[]
+  dLaunch: { instanceId: string | null; pid: number | null; startedAt: number }
 }
 
 const AppCtx = createContext<Ctx>(null as unknown as Ctx)
@@ -199,6 +210,45 @@ function loadSettings(): Settings {
     if (raw) return { ...defaultSettings, ...JSON.parse(raw) }
   } catch { /* 忽略 */ }
   return defaultSettings
+}
+
+const DESKTOP_TAGS: TagColor[] = ['green', 'blue', 'yellow', 'pink', 'purple', 'teal']
+
+function mapDesktopInstance(d: DesktopInstance, index: number): Instance {
+  const loaderMap: Record<string, LoaderType> = {
+    vanilla: 'Vanilla', fabric: 'Fabric', forge: 'Forge', neoforge: 'NeoForge', quilt: 'Quilt',
+  }
+  const icon: IconKind =
+    d.loader === 'forge' || d.loader === 'neoforge' ? 'gear'
+      : d.loader === 'fabric' || d.loader === 'quilt' ? 'grass'
+        : 'island'
+  return {
+    id: d.id,
+    name: d.name,
+    mcVersion: d.mc_version,
+    loader: loaderMap[d.loader] ?? 'Vanilla',
+    loaderVersion: d.loader_version,
+    icon,
+    tag: DESKTOP_TAGS[index % DESKTOP_TAGS.length],
+    favorite: false,
+    lastPlayed: d.last_played ?? '从未',
+    playTime: '—',
+    modsCount: 0,
+    memoryMB: d.memory_mb,
+    java: 'Java（自动匹配）',
+    isolation: true,
+    installed: d.installed,
+  }
+}
+
+function mapDesktopAccount(a: DesktopAccount): Account {
+  return {
+    id: a.uuid,
+    name: a.name,
+    kind: a.kind === 'microsoft' ? 'microsoft' : a.kind === 'authlib' ? 'authlib' : 'offline',
+    server: a.kind === 'authlib' ? '皮肤站' : undefined,
+    skin: a.kind === 'offline' ? 'pomelo' : 'steve',
+  }
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -215,9 +265,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettingsState] = useState<Settings>(loadSettings)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [modal, setModal] = useState<ModalState>(null)
-  const [wizardOpen, setWizardOpen] = useState(() => localStorage.getItem('pomelo-demo-wizard') !== 'done')
+  const [wizardOpen, setWizardOpen] = useState(() => !isDesktop() && localStorage.getItem('pomelo-demo-wizard') !== 'done')
   const [installedIds, setInstalledIds] = useState<string[]>([])
   const [sim, dispatch] = useReducer(simReducer, { launch: idleLaunch, downloads: initialDownloads })
+
+  /* 桌面模式 */
+  const desktopEnv = isDesktop()
+  const [desktop, setDesktop] = useState(false)
+  const [versionOptions, setVersionOptions] = useState<string[]>([])
+  const [realTasks, setRealTasks] = useState<DownloadTask[]>([])
+  const [dLaunch, setDLaunch] = useState<{ instanceId: string | null; pid: number | null; startedAt: number }>({
+    instanceId: null, pid: null, startedAt: 0,
+  })
+  const desktopRef = React.useRef(desktop)
+  desktopRef.current = desktop
 
   /* 模拟时钟 */
   useEffect(() => {
@@ -248,6 +309,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setTimeout(() => setToasts(ts => ts.filter(t => t.id !== id)), 4200)
   }, [])
 
+  /* 桌面核心：加载真实实例/账户/版本列表 */
+  useEffect(() => {
+    if (!desktopEnv) return
+    let alive = true
+    getSystemInfo()
+      .then(() => { if (alive) setDesktop(true) })
+      .catch(e => console.warn('desktop core unavailable', e))
+    listDesktopInstances()
+      .then(list => {
+        if (!alive) return
+        const mapped = list.map(mapDesktopInstance)
+        setInstances(mapped)
+        if (mapped.length > 0) {
+          setCurrentId(prev => (mapped.some(i => i.id === prev) ? prev : mapped[0].id))
+        }
+      })
+      .catch(e => console.warn('list_instances failed', e))
+    listDesktopAccounts()
+      .then(accs => {
+        if (!alive) return
+        const mapped = accs.map(mapDesktopAccount)
+        setAccounts(mapped)
+        if (mapped.length > 0) setCurrentAccId(mapped[0].id)
+      })
+      .catch(e => console.warn('list_accounts failed', e))
+    listVersions(40)
+      .then(v => { if (alive) setVersionOptions(v.map(x => x.id)) })
+      .catch(() => { /* 离线时回退内置版本选项 */ })
+    return () => { alive = false }
+  }, [desktopEnv])
+
+  /* 游戏退出事件 */
+  useEffect(() => {
+    if (!desktop) return
+    let un: (() => void) | undefined
+    onGameExit(() => {
+      setDLaunch({ instanceId: null, pid: null, startedAt: 0 })
+      toast('游戏已退出', 'info')
+    }).then(u => { un = u }).catch(() => {})
+    return () => { un?.() }
+  }, [desktop, toast])
+
   /* 启动阶段副作用 */
   useEffect(() => {
     if (sim.launch.phase === 'running' && sim.launch.logs.length > 0) {
@@ -265,6 +368,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const startLaunch = useCallback((id?: string) => {
+    if (desktop) {
+      const inst = instances.find(i => i.id === (id ?? currentId))
+      if (!inst) { toast('未选择实例', 'warning'); return }
+      if (!inst.installed) { toast('请先安装游戏文件', 'warning'); return }
+      const acc = accounts.find(a => a.id === currentAccId)
+      if (!acc || acc.kind !== 'offline') {
+        toast('桌面版当前支持离线账户启动；请添加离线账户（Microsoft 登录下个里程碑接入）', 'warning')
+        return
+      }
+      setCurrentId(inst.id)
+      setPage('home')
+      setDetailId(null)
+      launchDesktopInstance(inst.id, acc.name, inst.memoryMB)
+        .then(pid => {
+          setDLaunch({ instanceId: inst.id, pid, startedAt: Date.now() })
+          toast('游戏已启动，正在加载资源…', 'success')
+        })
+        .catch(e => toast(`启动失败：${e}`, 'danger'))
+      return
+    }
     const instId = id ?? currentId
     const inst = instances.find(i => i.id === instId)
     if (!inst) return
@@ -272,12 +395,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPage('home')
     setDetailId(null)
     dispatch({ type: 'start', instanceId: instId, crashDemo: !!inst.crashDemo, now: Date.now() })
-  }, [currentId, instances])
+  }, [currentId, instances, desktop, accounts, currentAccId, toast])
 
   const stopLaunch = useCallback(() => {
+    if (desktop) {
+      stopDesktopGame()
+        .then(() => {
+          setDLaunch({ instanceId: null, pid: null, startedAt: 0 })
+          toast('已结束游戏', 'info')
+        })
+        .catch(e => toast(`结束失败：${e}`, 'danger'))
+      return
+    }
     dispatch({ type: 'stop' })
     toast('游戏已结束，启动器回到前台', 'info')
-  }, [toast])
+  }, [toast, desktop])
 
   const fixAndRelaunch = useCallback(() => {
     setMods(m => ({ ...m, i6: (m.i6 ?? []).map(mod => mod.id === CRASH_INFO.culpritId ? { ...mod, enabled: false } : mod) }))
@@ -292,6 +424,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [toast])
 
   const installResource = useCallback((res: ResourceItem, withDeps: boolean, targetId?: string) => {
+    if (desktop) {
+      setModal(null)
+      toast('桌面版：模组/资源安装将在 M2 接入（当前可通过 CLI 或继续使用浏览器演示）', 'warning')
+      return
+    }
     const target = instances.find(i => i.id === (targetId ?? currentId))
     const instName = res.category === 'modpack' ? res.zhName : target?.name
     const ext = res.category === 'modpack' ? 'mrpack' : res.category === 'mod' ? 'jar' : 'zip'
@@ -340,9 +477,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     setInstalledIds(ids => [...ids, res.id])
     setModal(null)
-  }, [addTask, instances, currentId, settings.memory, toast])
+  }, [addTask, instances, currentId, settings.memory, toast, desktop])
 
   const createInstance = useCallback((name: string, ver: string, loader: LoaderType) => {
+    if (desktop) {
+      const backendLoader = loader.toLowerCase()
+      ;(async () => {
+        try {
+          const created = await createDesktopInstance(name, ver, backendLoader)
+          const list = await listDesktopInstances()
+          const mapped = list.map(mapDesktopInstance)
+          setInstances(mapped)
+          setCurrentId(created.id)
+          setModal(null)
+          setPage('instances')
+          toast(`实例「${name}」已创建 · 游戏文件需在实例页确认安装`, 'success')
+        } catch (e) {
+          toast(`创建失败：${e}`, 'danger')
+        }
+      })()
+      return
+    }
     const id = uid('i')
     const tags: TagColor[] = ['green', 'blue', 'yellow', 'pink', 'purple', 'teal']
     setInstances(list => [{
@@ -356,15 +511,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setModal(null)
     setPage('instances')
     toast(`实例「${name}」已创建 · 游戏文件不会自动下载，请在实例页确认安装`, 'success')
-  }, [settings.memory, toast])
+  }, [settings.memory, toast, desktop])
 
   const installGame = useCallback((id: string) => {
     const inst = instances.find(i => i.id === id)
-    if (!inst || inst.installed) return
+    if (!inst) return
+    if (desktop) {
+      if (inst.installed) return
+      const taskId = `real-${id}`
+      const run = async () => {
+        setRealTasks(ts => [
+          { id: taskId, name: `${inst.mcVersion} 游戏文件（准备中…）`, kind: 'game', sizeMB: 0, progress: 1, speedMBs: 0, status: 'downloading', source: 'BMCLAPI', instanceName: inst.name },
+          ...ts.filter(t => t.id !== taskId),
+        ])
+        let off: (() => void) | undefined
+        try {
+          off = await onInstallProgress(p => {
+            setRealTasks(ts => ts.map(t => t.id === taskId ? {
+              ...t,
+              progress: p.total ? Math.min(99, (p.current / p.total) * 100) : 2,
+              name: `${inst.mcVersion} 游戏文件（${p.message}）`,
+            } : t))
+          })
+          await installDesktopInstance(id, settings.source !== 'official')
+          setRealTasks(ts => ts.map(t => t.id === taskId ? { ...t, progress: 100, status: 'done', name: `${inst.mcVersion} 游戏文件` } : t))
+          setInstances(list => list.map(i => i.id === id ? { ...i, installed: true } : i))
+          toast('游戏文件安装完成', 'success')
+        } catch (e) {
+          setRealTasks(ts => ts.map(t => t.id === taskId ? { ...t, status: 'error', error: String(e), name: `${inst.mcVersion} 游戏文件` } : t))
+          toast(`安装失败：${e}`, 'danger')
+        } finally {
+          off?.()
+        }
+      }
+      void run()
+      return
+    }
+    if (inst.installed) return
     addTask(`${inst.mcVersion} 游戏文件（客户端 · 由你确认发起）`, 'game', 260, 'BMCLAPI', inst.name)
     setInstances(list => list.map(i => i.id === id ? { ...i, installed: true } : i))
     toast('安装任务已加入下载队列：版本下载始终由你确认发起', 'success')
-  }, [instances, addTask, toast])
+  }, [instances, addTask, toast, desktop, settings.source])
 
   const value: Ctx = {
     page,
@@ -372,8 +559,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     detailId, openDetail: setDetailId,
     instances, currentId, setCurrentId,
     accounts, currentAccId, setCurrentAccId,
-    addAccount: a => { setAccounts(list => [...list, a]); setCurrentAccId(a.id); toast(`账户「${a.name}」已添加并设为当前`, 'success') },
+    addAccount: a => {
+      if (desktop) {
+        if (a.kind !== 'offline') {
+          toast('Microsoft / 皮肤站登录将在下个里程碑接入', 'warning')
+          return
+        }
+        addOfflineAccount(a.name)
+          .then(list => {
+            const mapped = list.map(mapDesktopAccount)
+            setAccounts(mapped)
+            const found = mapped.find(x => x.name === a.name)
+            if (found) setCurrentAccId(found.id)
+            toast(`账户「${a.name}」已添加并设为当前`, 'success')
+          })
+          .catch(e => toast(`添加失败：${e}`, 'danger'))
+        return
+      }
+      setAccounts(list => [...list, a]); setCurrentAccId(a.id); toast(`账户「${a.name}」已添加并设为当前`, 'success')
+    },
     removeAccount: id => {
+      if (desktop) {
+        removeDesktopAccount(id)
+          .then(list => {
+            const mapped = list.map(mapDesktopAccount)
+            setAccounts(mapped)
+            if (!mapped.some(x => x.id === currentAccId)) setCurrentAccId(mapped[0]?.id ?? '')
+            toast('账户已删除', 'info')
+          })
+          .catch(e => toast(`删除失败：${e}`, 'danger'))
+        return
+      }
       setAccounts(list => list.filter(a => a.id !== id))
       if (currentAccId === id) setCurrentAccId(accounts.find(a => a.id !== id)?.id ?? '')
       toast('账户已删除', 'info')
@@ -413,7 +629,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     removeServer: (instId, id) => setServers(sv => ({ ...sv, [instId]: (sv[instId] ?? []).filter(x => x.id !== id) })),
     saves,
-    downloads: sim.downloads,
+    downloads: desktop ? realTasks : sim.downloads,
     dlOp: (id, op) => dispatch({ type: 'dl-op', id, op }),
     pauseAll: () => dispatch({ type: 'pause-all' }),
     resumeAll: () => dispatch({ type: 'resume-all' }),
@@ -428,8 +644,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     closeWizard: () => { setWizardOpen(false); localStorage.setItem('pomelo-demo-wizard', 'done') },
     openWizard: () => setWizardOpen(true),
     installedIds, installResource, createInstance, installGame,
+    desktop, versionOptions, dLaunch,
     toggleFavorite: id => setInstances(list => list.map(i => i.id === id ? { ...i, favorite: !i.favorite } : i)),
-    updateInstance: (id, patch) => setInstances(list => list.map(i => i.id === id ? { ...i, ...patch } : i)),
+    updateInstance: (id, patch) => {
+      if (desktop) {
+        updateDesktopInstance(id, patch.memoryMB, patch.java)
+          .then(d => setInstances(list => list.map(i => i.id === id ? { ...i, ...patch, memoryMB: d.memory_mb } : i)))
+          .catch(e => toast(`保存失败：${e}`, 'danger'))
+        return
+      }
+      setInstances(list => list.map(i => i.id === id ? { ...i, ...patch } : i))
+    },
     logsFor: instId => {
       if (sim.launch.instanceId === instId && sim.launch.logs.length) return sim.launch.logs
       return [

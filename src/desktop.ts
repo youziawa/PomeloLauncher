@@ -21,7 +21,30 @@ export interface DesktopInstance {
   loader_version?: string
   created_at: string
   memory_mb: number
+  java_path?: string
   installed: boolean
+  last_played?: string
+}
+
+export interface DesktopAccount {
+  name: string
+  uuid: string
+  kind: string
+  access_token: string
+  refresh_token?: string
+}
+
+export interface DesktopVersion {
+  id: string
+  kind: string
+  release_time?: string
+}
+
+export interface InstallProgress {
+  phase: 'resolve' | 'download' | 'done'
+  current: number
+  total: number
+  message: string
 }
 
 export const isDesktop = () =>
@@ -35,9 +58,34 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 export const getSystemInfo = () => invoke<SystemInfo>('system_info')
 export const listJava = () => invoke<JavaInfo[]>('list_java')
 export const listInstances = () => invoke<DesktopInstance[]>('list_instances')
+export const listVersions = (limit = 30) => invoke<DesktopVersion[]>('list_versions', { limit })
+export const createInstance = (name: string, version: string, loader: string) =>
+  invoke<DesktopInstance>('create_instance', { name, version, loader })
+export const updateInstance = (id: string, memoryMb?: number, javaPath?: string) =>
+  invoke<DesktopInstance>('update_instance', { id, memoryMb, javaPath })
+export const deleteInstance = (id: string) => invoke<void>('delete_instance', { id })
+export const installInstance = (id: string, mirror: boolean) => invoke<void>('install_instance', { id, mirror })
+export const launchInstance = (id: string, offlineName: string, memory: number) =>
+  invoke<number>('launch_instance', { id, offlineName, memory })
+export const stopGame = () => invoke<void>('stop_game')
+export const gameRunning = () => invoke<number | null>('game_running')
+export const readLog = (id: string, maxLines = 400) => invoke<string>('read_log', { id, maxLines })
+export const listAccounts = () => invoke<DesktopAccount[]>('list_accounts')
+export const addOfflineAccount = (name: string) => invoke<DesktopAccount[]>('add_offline_account', { name })
+export const removeAccount = (uuid: string) => invoke<DesktopAccount[]>('remove_account', { uuid })
 export const openDataDir = () => invoke<void>('open_data_dir')
 
-/* 窗口控制：桌面端调用原生窗口，浏览器端保持演示行为 */
+/* 事件订阅（安装进度 / 游戏退出） */
+export async function onInstallProgress(cb: (p: InstallProgress) => void): Promise<() => void> {
+  const { listen } = await import('@tauri-apps/api/event')
+  return listen<InstallProgress>('install-progress', e => cb(e.payload))
+}
+export async function onGameExit(cb: (code: unknown) => void): Promise<() => void> {
+  const { listen } = await import('@tauri-apps/api/event')
+  return listen('game-exit', e => cb(e.payload))
+}
+
+/* 窗口控制 */
 export async function windowMinimize() {
   const { getCurrentWindow } = await import('@tauri-apps/api/window')
   await getCurrentWindow().minimize()
@@ -49,4 +97,8 @@ export async function windowClose() {
 export async function windowToggleMaximize() {
   const { getCurrentWindow } = await import('@tauri-apps/api/window')
   await getCurrentWindow().toggleMaximize()
+}
+export async function windowStartDragging() {
+  const { getCurrentWindow } = await import('@tauri-apps/api/window')
+  await getCurrentWindow().startDragging()
 }

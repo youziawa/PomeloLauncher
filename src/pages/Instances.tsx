@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useApp } from '../store'
 import { Icon, InstanceIcon, LoaderChip, TagDot, Toggle, Empty, PingChip, PixelShot, Select, ResourceIcon } from '../ui'
+import { readLog } from '../desktop'
 import { TAG_COLORS, TagColor } from '../mock'
 
 export default function Instances() {
@@ -137,13 +138,13 @@ function Detail({ id }: { id: string }) {
         ))}
       </div>
       <div style={{ paddingTop: 14 }}>
-        {tab === '模组' && <ModsTab id={id} />}
-        {tab === '资源包' && <PacksTab id={id} kind="resourcepacks" items={packs.resourcepacks} />}
-        {tab === '光影' && <PacksTab id={id} kind="shaders" items={packs.shaders} />}
-        {tab === '存档' && <SavesTab id={id} />}
-        {tab === '服务器' && <ServersTab id={id} />}
-        {tab === '截图' && <ShotsTab />}
-        {tab === '日志' && <LogsTab id={id} />}
+        {tab === '模组' && (app.desktop ? <DesktopSoon label="模组管理" /> : <ModsTab id={id} />)}
+        {tab === '资源包' && (app.desktop ? <DesktopSoon label="资源包管理" /> : <PacksTab id={id} kind="resourcepacks" items={packs.resourcepacks} />)}
+        {tab === '光影' && (app.desktop ? <DesktopSoon label="光影管理" /> : <PacksTab id={id} kind="shaders" items={packs.shaders} />)}
+        {tab === '存档' && (app.desktop ? <DesktopSoon label="存档管理" /> : <SavesTab id={id} />)}
+        {tab === '服务器' && (app.desktop ? <DesktopSoon label="服务器管理" /> : <ServersTab id={id} />)}
+        {tab === '截图' && (app.desktop ? <DesktopSoon label="截图管理" /> : <ShotsTab />)}
+        {tab === '日志' && (app.desktop ? <RealLogs id={id} /> : <LogsTab id={id} />)}
         {tab === '设置' && <InstSettings id={id} />}
       </div>
     </div>
@@ -330,6 +331,46 @@ function LogsTab({ id }: { id: string }) {
   )
 }
 
+function DesktopSoon({ label }: { label: string }) {
+  return (
+    <div className="card">
+      <Empty
+        icon="info"
+        title={`${label}将在后续里程碑接入`}
+        hint="桌面版当前优先打通：实例、安装、启动、账户与日志；M1/M2 会补齐模组与资源管理。"
+      />
+    </div>
+  )
+}
+
+function RealLogs({ id }: { id: string }) {
+  const app = useApp()
+  const [text, setText] = useState('')
+  const [err, setErr] = useState('')
+  const load = () => {
+    readLog(id, 600)
+      .then(t => { setText(t); setErr('') })
+      .catch(e => setErr(String(e)))
+  }
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+  return (
+    <div>
+      <div className="toolbar">
+        <span className="muted small">latest.log（真实日志，来自实例目录）</span>
+        <span className="grow" />
+        <button className="btn ghost sm" onClick={load}><Icon name="refresh" size={13} />刷新</button>
+        <button className="btn ghost sm" onClick={() => { navigator.clipboard?.writeText(text); app.toast('日志已复制到剪贴板', 'success') }}><Icon name="copy" size={13} />复制</button>
+      </div>
+      {err
+        ? <div className="card pad muted small">{err}</div>
+        : <pre className="logview" style={{ whiteSpace: 'pre-wrap', height: 380 }}>{text || '暂无日志：启动一次游戏后，这里会出现 logs/latest.log 的内容。'}</pre>}
+    </div>
+  )
+}
+
 function InstSettings({ id }: { id: string }) {
   const app = useApp()
   const inst = app.instances.find(i => i.id === id)!
@@ -345,37 +386,53 @@ function InstSettings({ id }: { id: string }) {
       </div>
       <div className="field">
         <label>Java 运行时</label>
-        <Select ariaLabel="Java 运行时" width={220} value={inst.java} onChange={v => app.updateInstance(id, { java: v })} options={[
-          { value: 'Java 21（自动）', label: 'Java 21（自动）' },
-          { value: 'Java 17（自动）', label: 'Java 17（自动）' },
-          { value: 'Java 8（自动）', label: 'Java 8（自动）' },
-          { value: '手动选择…（演示）', label: '手动选择…（演示）' },
-        ]} />
+        {app.desktop
+          ? <span className="chip outline">自动匹配（按 MC 版本选择已安装的 Java）</span>
+          : <Select ariaLabel="Java 运行时" width={220} value={inst.java} onChange={v => app.updateInstance(id, { java: v })} options={[
+            { value: 'Java 21（自动）', label: 'Java 21（自动）' },
+            { value: 'Java 17（自动）', label: 'Java 17（自动）' },
+            { value: 'Java 8（自动）', label: 'Java 8（自动）' },
+            { value: '手动选择…（演示）', label: '手动选择…（演示）' },
+          ]} />}
         <span className="hint">按游戏版本自动匹配；手动覆盖不兼容版本时会在启动前检查中警告</span>
       </div>
-      <div className="field-inline">
-        <div className="txt">
-          <div className="t" style={{ fontWeight: 600 }}>版本隔离</div>
-          <div className="hint">每个实例独立 mods / config / saves，互不干扰</div>
+      {app.desktop ? (
+        <div className="field-inline">
+          <div className="txt">
+            <div className="t" style={{ fontWeight: 600 }}>版本隔离</div>
+            <div className="hint">桌面版实例固定使用独立 .minecraft 目录，模组与存档互不干扰</div>
+          </div>
+          <span className="chip success">已开启</span>
         </div>
-        <Toggle checked={inst.isolation} onChange={v => app.updateInstance(id, { isolation: v })} label="版本隔离" />
-      </div>
-      <div className="field">
-        <label>启动后自动加入服务器</label>
-        <Select ariaLabel="启动后自动加入服务器" width={280} value={inst.autoServer ?? ''} onChange={v => app.updateInstance(id, { autoServer: v || undefined })} options={[
-          { value: '', label: '不自动加入' },
-          ...servers.map(s => ({ value: s.id, label: `${s.name}（${s.address}）` })),
-        ]} />
-      </div>
-      <div className="field">
-        <label>游戏窗口</label>
-        <Select ariaLabel="游戏窗口" width={200} value={win} onChange={setWin} options={[
-          { value: '854×480（默认）', label: '854×480（默认）' },
-          { value: '1280×720', label: '1280×720' },
-          { value: '1920×1080', label: '1920×1080' },
-          { value: '全屏', label: '全屏' },
-        ]} />
-      </div>
+      ) : (
+        <div className="field-inline">
+          <div className="txt">
+            <div className="t" style={{ fontWeight: 600 }}>版本隔离</div>
+            <div className="hint">每个实例独立 mods / config / saves，互不干扰</div>
+          </div>
+          <Toggle checked={inst.isolation} onChange={v => app.updateInstance(id, { isolation: v })} label="版本隔离" />
+        </div>
+      )}
+      {!app.desktop && (
+        <>
+          <div className="field">
+            <label>启动后自动加入服务器</label>
+            <Select ariaLabel="启动后自动加入服务器" width={280} value={inst.autoServer ?? ''} onChange={v => app.updateInstance(id, { autoServer: v || undefined })} options={[
+              { value: '', label: '不自动加入' },
+              ...servers.map(s => ({ value: s.id, label: `${s.name}（${s.address}）` })),
+            ]} />
+          </div>
+          <div className="field">
+            <label>游戏窗口</label>
+            <Select ariaLabel="游戏窗口" width={200} value={win} onChange={setWin} options={[
+              { value: '854×480（默认）', label: '854×480（默认）' },
+              { value: '1280×720', label: '1280×720' },
+              { value: '1920×1080', label: '1920×1080' },
+              { value: '全屏', label: '全屏' },
+            ]} />
+          </div>
+        </>
+      )}
     </div>
   )
 }

@@ -12,8 +12,12 @@ export function Wizard() {
   const [nick, setNick] = useState('柚子玩家')
 
   const finish = () => {
-    app.setCurrentId('i2')
     app.closeWizard()
+    if (app.desktop) {
+      app.toast('欢迎使用 PomeloLauncher 桌面版：请到「实例」新建实例并安装游戏文件', 'success')
+      return
+    }
+    app.setCurrentId('i2')
     app.toast('欢迎使用 PomeloLauncher！已为你准备好 1.21.4 正式版', 'success')
   }
 
@@ -26,13 +30,15 @@ export function Wizard() {
             <h1>欢迎来到 PomeloLauncher</h1>
             <p className="lead">柚子启动器 · 剥开即玩。三步开始你的 Minecraft 之旅。</p>
             <div className="opts">
-              <button className="opt" onClick={() => { setMode('ms'); setStep(1) }}>
-                <Icon name="shield" />
-                <span><span className="t">正版登录</span><br /><span className="s">Microsoft 设备码，手机扫码即可，无需输入密码</span></span>
-              </button>
+              {!app.desktop && (
+                <button className="opt" onClick={() => { setMode('ms'); setStep(1) }}>
+                  <Icon name="shield" />
+                  <span><span className="t">正版登录</span><br /><span className="s">Microsoft 设备码，手机扫码即可，无需输入密码</span></span>
+                </button>
+              )}
               <button className="opt" onClick={() => { setMode('offline'); setStep(1) }}>
                 <Icon name="user" />
-                <span><span className="t">先离线试试</span><br /><span className="s">本地昵称即可游玩，随时可升级正版</span></span>
+                <span><span className="t">先离线试试</span><br /><span className="s">{app.desktop ? '桌面版当前支持离线账户，随时可升级正版' : '本地昵称即可游玩，随时可升级正版'}</span></span>
               </button>
             </div>
           </>
@@ -122,13 +128,18 @@ export function CrashModal() {
 export function NewInstanceModal() {
   const app = useApp()
   const [name, setName] = useState('')
-  const [ver, setVer] = useState('1.21.4')
+  const desktopVersions = app.desktop && app.versionOptions.length > 0 ? app.versionOptions.slice(0, 25) : []
+  const versions = desktopVersions.length > 0
+    ? desktopVersions
+    : ['1.21.4', '1.21.1', '1.20.1', '1.19.4', 'b1.7.3']
+  const [ver, setVer] = useState('')
   const [loader, setLoader] = useState<LoaderType>('Vanilla')
+  const effectiveVer = ver || versions[0]
   return (
     <Modal title="新建实例" onClose={app.closeModal}
       footer={<>
         <button className="btn ghost" onClick={app.closeModal}>取消</button>
-        <button className="btn primary" disabled={name.trim().length === 0} onClick={() => app.createInstance(name.trim(), ver, loader)}>创建实例</button>
+        <button className="btn primary" disabled={name.trim().length === 0} onClick={() => app.createInstance(name.trim(), effectiveVer, loader)}>创建实例</button>
       </>}>
       <div className="settings-form">
         <div className="field">
@@ -137,25 +148,23 @@ export function NewInstanceModal() {
         </div>
         <div className="field">
           <label>游戏版本</label>
-          <Select ariaLabel="游戏版本" width={260} value={ver} onChange={setVer} options={[
-            { value: '1.21.4', label: '1.21.4（最新正式版）' },
-            { value: '1.21.1', label: '1.21.1' },
-            { value: '1.20.1', label: '1.20.1（模组生态热门）' },
-            { value: '1.19.4', label: '1.19.4' },
-            { value: 'b1.7.3', label: 'b1.7.3（远古版）' },
-          ]} />
-          <span className="hint">快照 / 愚人节版 / 远古版完整版可在版本过滤器中选择</span>
+          <Select ariaLabel="游戏版本" width="100%" value={effectiveVer} onChange={setVer} options={versions.map(v => ({ value: v, label: v }))} />
+          <span className="hint">{app.desktop ? '版本列表来自 Mojang 清单（实时）' : '快照 / 愚人节版 / 远古版完整版可在版本过滤器中选择'}</span>
         </div>
         <div className="field">
           <label>模组加载器</label>
-          <Select ariaLabel="模组加载器" width={260} value={loader} onChange={v => setLoader(v as LoaderType)} options={[
-            { value: 'Vanilla', label: '原版（不安装加载器）' },
-            { value: 'Fabric', label: 'Fabric（轻量，推荐新手）' },
-            { value: 'Forge', label: 'Forge（大型模组生态）' },
-            { value: 'NeoForge', label: 'NeoForge' },
-            { value: 'Quilt', label: 'Quilt' },
-          ]} />
-          <span className="hint">OptiFine / LiteLoader 等将在正式版 M2 提供</span>
+          <Select ariaLabel="模组加载器" width="100%" value={loader} onChange={v => setLoader(v as LoaderType)} options={
+            app.desktop
+              ? [{ value: 'Vanilla', label: '原版（M1 接入 Fabric/Forge 安装器）' }]
+              : [
+                { value: 'Vanilla', label: '原版（不安装加载器）' },
+                { value: 'Fabric', label: 'Fabric（轻量，推荐新手）' },
+                { value: 'Forge', label: 'Forge（大型模组生态）' },
+                { value: 'NeoForge', label: 'NeoForge' },
+                { value: 'Quilt', label: 'Quilt' },
+              ]
+          } />
+          <span className="hint">{app.desktop ? '桌面版当前仅支持原版；加载器安装将在 M1 接入' : 'OptiFine / LiteLoader 等将在正式版 M2 提供'}</span>
         </div>
         <p className="muted small">创建后不会自动下载游戏文件；在实例页点击「安装游戏文件」并由你确认后才会开始下载。</p>
       </div>

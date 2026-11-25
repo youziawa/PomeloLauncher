@@ -34,11 +34,14 @@ enum Cmd {
         #[arg(long)]
         mirror: bool,
     },
-    /// 下载并安装一个版本（创建新实例，由用户显式执行，不自动下载）
+    /// 下载并安装一个版本（创建新实例，或 --instance 续装/修复已有实例）
     Install {
-        version: String,
+        version: Option<String>,
         #[arg(long)]
         name: Option<String>,
+        /// 续装/修复已有实例（id 或名称）
+        #[arg(long)]
+        instance: Option<String>,
         /// 使用 BMCLAPI 镜像
         #[arg(long)]
         mirror: bool,
@@ -118,8 +121,8 @@ async fn main() -> Result<()> {
                 }
             }
         }
-        Cmd::Install { version, name, mirror, concurrency } => {
-            install(&store(cli.root), &version, name.as_deref(), mirror, concurrency).await?;
+        Cmd::Install { version, name, instance, mirror, concurrency } => {
+            install(&store(cli.root), version.as_deref(), name.as_deref(), instance.as_deref(), mirror, concurrency).await?;
         }
         Cmd::Launch { instance, name, java, memory, dry_run } => {
             launch_instance(&store(cli.root), &instance, &name, java, memory, dry_run).await?;
@@ -135,11 +138,26 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn install(store: &InstanceStore, version: &str, name: Option<&str>, mirror: bool, concurrency: usize) -> Result<()> {
-    let inst = store.create(name.unwrap_or(version), version, "vanilla")?;
-    println!("创建实例：{}（{}）", inst.name, inst.id);
+async fn install(
+    store: &InstanceStore,
+    version: Option<&str>,
+    name: Option<&str>,
+    instance: Option<&str>,
+    mirror: bool,
+    concurrency: usize,
+) -> Result<()> {
+    let inst = match instance {
+        Some(key) => find_instance(store, key)?,
+        None => {
+            let v = version.context("请提供版本号，或用 --instance 续装已有实例")?;
+            let created = store.create(name.unwrap_or(v), v, "vanilla")?;
+            println!("创建实例：{}（{}）", created.name, created.id);
+            created
+        }
+    };
+    println!("安装目标：{}（{}，MC {}）", inst.name, inst.id, inst.mc_version);
     let manifest_url = if mirror { meta::BMCLAPI_MANIFEST } else { meta::OFFICIAL_MANIFEST };
-    let chain = meta::load_version_chain(&store.versions_dir(&inst.id), version, manifest_url).await?;
+    let chain = meta::load_version_chain(&store.versions_dir(&inst.id), &inst.mc_version, manifest_url).await?;
     let resolved = meta::resolve_chain(&chain)?;
     println!("版本链：{} 层；mainClass={}", chain.len(), resolved.main_class);
 
@@ -152,7 +170,7 @@ async fn install(store: &InstanceStore, version: &str, name: Option<&str>, mirro
     if let Some(art) = resolved.downloads.as_ref().and_then(|d| d.client.as_ref()) {
         items.push(DownloadItem { url: art.url.clone(), target: jar_path, sha1: art.sha1.clone(), size: art.size });
     } else {
-        bail!("版本 {} 缺少客户端 jar 信息", version);
+        bail!("版本 {} 缺少客户端 jar 信息", inst.mc_version);
     }
 
     // 库
