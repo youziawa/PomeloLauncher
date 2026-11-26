@@ -34,7 +34,7 @@ export function Wizard() {
               {!app.desktop && (
                 <button className="opt" onClick={() => { setMode('ms'); setStep(1) }}>
                   <Icon name="shield" />
-                  <span><span className="t">正版登录</span><br /><span className="s">Microsoft 设备码，手机扫码即可，无需输入密码</span></span>
+                  <span><span className="t">正版登录</span><br /><span className="s">打开浏览器登录 Microsoft 账户，完成后自动回来</span></span>
                 </button>
               )}
               <button className="opt" onClick={() => { setMode('offline'); setStep(1) }}>

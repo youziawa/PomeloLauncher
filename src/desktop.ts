@@ -105,6 +105,13 @@ export type DevicePoll =
   | { status: 'error'; message: string }
 export const msDeviceCode = (clientId: string) => invoke<DeviceCode>('ms_device_code', { clientId })
 export const msPoll = (clientId: string, deviceCode: string) => invoke<DevicePoll>('ms_poll', { clientId, deviceCode })
+export interface MsSession {
+  name: string
+  uuid: string
+  access_token: string
+  refresh_token?: string
+}
+export const msBrowserLogin = () => invoke<MsSession>('ms_browser_login')
 export const openDataDir = () => invoke<void>('open_data_dir')
 
 /* 事件订阅（安装进度 / 游戏退出） */

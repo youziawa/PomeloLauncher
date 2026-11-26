@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react'
 import { useApp } from '../store'
 import { Icon, Toggle, Logo, Select } from '../ui'
 import { ACCENTS } from '../mock'
-import { isDesktop, getSystemInfo, listJava, openDataDir, getMsClientId, setMsClientId, SystemInfo, JavaInfo } from '../desktop'
+import { isDesktop, getSystemInfo, listJava, openDataDir, SystemInfo, JavaInfo } from '../desktop'
 
 /* 模块级组件：避免内联定义导致每次渲染重挂载（滑杆拖拽会被打断） */
 const matchQ = (q: string, t: string, hint = '') => q === '' || (t + hint).toLowerCase().includes(q.toLowerCase())
@@ -36,14 +36,12 @@ export default function Settings() {
   const [desktop, setDesktop] = useState<SystemInfo | null>(null)
   const [javas, setJavas] = useState<JavaInfo[]>([])
   const [coreErr, setCoreErr] = useState<string | null>(null)
-  const [msId, setMsId] = useState('')
   const desktopMode = isDesktop()
 
   const refreshCore = () => {
     if (!desktopMode) return
     getSystemInfo().then(setDesktop).catch(e => setCoreErr(String(e)))
     listJava().then(setJavas).catch(e => setCoreErr(String(e)))
-    getMsClientId().then(setMsId).catch(() => {})
   }
   useEffect(() => {
     refreshCore()
@@ -174,13 +172,6 @@ export default function Settings() {
                         <span key={j.path} className="small num" title={j.path}>Java {j.major} · {j.full_version}</span>
                       ))}
                     <button className="btn quiet sm" onClick={refreshCore}><Icon name="refresh" size={13} />重新扫描</button>
-                  </div>
-                </div>
-                <div className="set-row">
-                  <div className="txt"><div className="t">Microsoft 客户端 ID</div><div className="hint">设备码登录所需的 Azure 应用 ID（需启用公共客户端流）；留空则登录入口引导填写</div></div>
-                  <div className="ctl">
-                    <input className="input mono" style={{ width: 260 }} value={msId} onChange={e => setMsId(e.target.value)} placeholder="未配置" />
-                    <button className="btn ghost sm" onClick={() => setMsClientId(msId.trim()).then(() => app.toast('客户端 ID 已保存', 'success')).catch(e => app.toast(String(e), 'danger'))}>保存</button>
                   </div>
                 </div>
               </>

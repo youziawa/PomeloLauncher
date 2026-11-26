@@ -15,10 +15,11 @@ use pomelo_downloader::{extract_natives, DownloadItem, Downloader};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::process::Child;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 struct AppState {
     store: InstanceStore,
@@ -580,6 +581,60 @@ async fn ms_poll(client_id: String, device_code: String) -> Result<pomelo_core::
     Ok(pomelo_core::auth::poll_device(client_id.trim(), &device_code).await)
 }
 
+/// 弹出登录窗口。用微软公开的 Minecraft 客户端完成授权，用户不用填任何代码。
+#[tauri::command]
+async fn ms_browser_login(app: tauri::AppHandle) -> Result<pomelo_core::auth::BrowserSession, String> {
+    if let Some(old) = app.get_webview_window("ms-login") {
+        let _ = old.close();
+    }
+    let (tx, rx) = mpsc::sync_channel::<String>(1);
+    let done = Arc::new(AtomicBool::new(false));
+    let auth_url = pomelo_core::auth::msa_authorize_url();
+    let parsed = auth_url.parse().map_err(|e| format!("登录地址无效：{e}"))?;
+    let app_nav = app.clone();
+    let tx_nav = tx.clone();
+    let done_nav = done.clone();
+    let window = WebviewWindowBuilder::new(&app, "ms-login", WebviewUrl::External(parsed))
+        .title("登录 Microsoft 账户")
+        .inner_size(480.0, 720.0)
+        .min_inner_size(420.0, 560.0)
+        .center()
+        .on_navigation(move |nav| {
+            if let Some(callback) = pomelo_core::auth::msa_callback_url(nav.as_str()) {
+                if !done_nav.swap(true, Ordering::SeqCst) {
+                    let _ = tx_nav.send(callback);
+                }
+                if let Some(w) = app_nav.get_webview_window("ms-login") {
+                    let _ = w.close();
+                }
+                return false;
+            }
+            true
+        })
+        .build()
+        .map_err(|e| format!("无法打开登录窗口：{e}"))?;
+    let done_close = done.clone();
+    let tx_close = tx.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::Destroyed = event {
+            if !done_close.swap(true, Ordering::SeqCst) {
+                let _ = tx_close.send(String::new());
+            }
+        }
+    });
+    let redirected = tauri::async_runtime::spawn_blocking(move || {
+        rx.recv_timeout(std::time::Duration::from_secs(180))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|_| "登录超时，请重试".to_string())?;
+    if redirected.is_empty() {
+        return Err("已取消登录".into());
+    }
+    let code = pomelo_core::auth::msa_code_from_redirect(&redirected).map_err(|e| e.to_string())?;
+    pomelo_core::auth::finish_msa_code(&code).await.map_err(|e| e.to_string())
+}
+
 /// 导出求助包：日志 + 实例元数据 + 模组清单（脱敏：不含令牌）
 #[tauri::command]
 fn export_help_pack(state: State<AppState>, id: String) -> Result<String, String> {
@@ -706,6 +761,7 @@ fn main() {
             get_ms_client_id,
             set_ms_client_id,
             ms_device_code,
+            ms_browser_login,
             ms_poll,
             export_help_pack,
             read_log

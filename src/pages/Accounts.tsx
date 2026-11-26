@@ -1,11 +1,9 @@
-/* 账户页 + 添加账户向导（微软设备码 / 离线 / authlib-injector 皮肤站） */
+/* 账户页 + 添加账户向导（微软浏览器登录 / 离线 / authlib-injector 皮肤站） */
 import React, { useEffect, useState } from 'react'
 import { useApp } from '../store'
 import { Icon, SkinHead, Modal, PlayerHead } from '../ui'
 import { uid } from '../mock'
-import {
-  DeviceCode, DevicePoll, msDeviceCode, msPoll, saveAccount, getMsClientId, setMsClientId,
-} from '../desktop'
+import { msBrowserLogin, saveAccount } from '../desktop'
 
 export default function Accounts() {
   const app = useApp()
@@ -76,55 +74,24 @@ function FakeQR() {
   )
 }
 
-/* 桌面版添加账户：Microsoft 设备码 / 离线 */
+/* 桌面版添加账户：Microsoft 浏览器登录 / 离线 */
 function DesktopAddAccount() {
   const app = useApp()
   const [tab, setTab] = useState<'ms' | 'offline'>('ms')
-  const [clientId, setClientId] = useState('')
-  const [idInput, setIdInput] = useState('')
-  const [code, setCode] = useState<DeviceCode | null>(null)
-  const [phase, setPhase] = useState<'idle' | 'waiting' | 'done' | 'error'>('idle')
+  const [phase, setPhase] = useState<'idle' | 'waiting' | 'error'>('idle')
   const [msg, setMsg] = useState('')
   const [nick, setNick] = useState('柚子玩家')
-  const [interval, setIntervalSec] = useState(5)
-
-  useEffect(() => {
-    getMsClientId().then(id => { setClientId(id); setIdInput(id) }).catch(() => {})
-  }, [])
-
-  useEffect(() => {
-    if (!code || phase !== 'waiting') return
-    let alive = true
-    const t = setInterval(async () => {
-      const r = await msPoll(clientId, code.device_code).catch(e => ({ status: 'error', message: String(e) } as DevicePoll))
-      if (!alive) return
-      if (r.status === 'pending') return
-      if (r.status === 'slow_down') { setIntervalSec(s => s + 5); return }
-      if (r.status === 'success') {
-        setPhase('done')
-        saveAccount({ name: r.name, uuid: r.uuid, kind: 'microsoft', access_token: r.access_token, refresh_token: r.refresh_token })
-          .then(() => {
-            app.refreshAccounts()
-            app.setCurrentAccId(r.uuid)
-            app.toast(`Microsoft 账户「${r.name}」登录成功`, 'success')
-            app.closeModal()
-          })
-          .catch(e => { setPhase('error'); setMsg(String(e)) })
-        return
-      }
-      setPhase('error')
-      setMsg(r.status === 'expired' ? '设备码已过期，请重新发起' : r.status === 'declined' ? '授权被拒绝' : r.message)
-    }, interval * 1000)
-    return () => { alive = false; clearInterval(t) }
-  }, [code, phase, interval, clientId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const start = async () => {
     setMsg('')
+    setPhase('waiting')
     try {
-      const c = await msDeviceCode(clientId)
-      setCode(c)
-      setIntervalSec(Math.max(5, c.interval))
-      setPhase('waiting')
+      const r = await msBrowserLogin()
+      await saveAccount({ name: r.name, uuid: r.uuid, kind: 'microsoft', access_token: r.access_token, refresh_token: r.refresh_token })
+      app.refreshAccounts()
+      app.setCurrentAccId(r.uuid)
+      app.toast(`Microsoft 账户「${r.name}」登录成功`, 'success')
+      app.closeModal()
     } catch (e) {
       setPhase('error')
       setMsg(String(e))
@@ -139,42 +106,14 @@ function DesktopAddAccount() {
       </div>
       {tab === 'ms' && (
         <div>
-          {!clientId ? (
-            <>
-              <p className="muted small" style={{ marginBottom: 10 }}>
-                设备码流需要一个 Azure 应用的客户端 ID（注册时启用“允许公共客户端流”）。填入你自己注册的 ID 后即可登录；也可在设置→桌面核心中修改。
-              </p>
-              <div className="field" style={{ marginBottom: 12 }}>
-                <input className="input mono" value={idInput} onChange={e => setIdInput(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
-              </div>
-              <button className="btn primary block" disabled={idInput.trim().length < 8}
-                onClick={() => setMsClientId(idInput.trim()).then(() => { setClientId(idInput.trim()); app.toast('客户端 ID 已保存', 'success') }).catch(e => setMsg(String(e)))}>
-                保存客户端 ID
-              </button>
-            </>
-          ) : !code ? (
-            <>
-              <p className="muted small" style={{ marginBottom: 12 }}>将发起设备码授权：在手机/浏览器打开验证页输入代码即可，无需在本机输入密码。</p>
-              <button className="btn primary block" onClick={start}><Icon name="shield" />发起设备码登录</button>
-            </>
-          ) : (
-            <>
-              <div className="device-code">{code.user_code}</div>
-              <p className="small muted" style={{ margin: '10px 0' }}>
-                打开 <span className="mono">{code.verification_uri}</span> 输入上方代码
-                <button className="btn quiet sm" style={{ marginLeft: 8 }} onClick={() => { navigator.clipboard?.writeText(code.user_code); app.toast('代码已复制', 'success') }}>复制</button>
-              </p>
-              <div className="ms-steps">
-                <div className={`check ${phase !== 'waiting' ? 'done' : ''}`}>
-                  {phase === 'waiting' ? <span className="spinner" /> : <Icon name="check" />}
-                  <span>{phase === 'waiting' ? '等待授权中…（每 ' + interval + 's 轮询）' : phase === 'done' ? '授权成功，正在保存账户' : '授权结束'}</span>
-                </div>
-              </div>
-              {phase === 'error' && <p className="small" style={{ color: 'var(--danger)', marginTop: 8 }}>{msg}</p>}
-              {phase === 'error' && <button className="btn ghost block" style={{ marginTop: 10 }} onClick={() => { setCode(null); setPhase('idle') }}>重新发起</button>}
-            </>
-          )}
-          {msg && phase !== 'error' && <p className="small" style={{ color: 'var(--danger)', marginTop: 8 }}>{msg}</p>}
+          <p className="muted small" style={{ marginBottom: 12 }}>
+            会弹出 Microsoft 登录窗口。用你的正版账号登录即可，不用填写客户端 ID，也不用抄设备码。
+          </p>
+          <button className="btn primary block" disabled={phase === 'waiting'} onClick={start}>
+            {phase === 'waiting' ? <><span className="spinner" />等待登录窗口…</> : <><Icon name="shield" />登录 Microsoft 账户</>}
+          </button>
+          {phase === 'waiting' && <p className="small muted" style={{ marginTop: 10 }}>在弹出的窗口里完成登录。关掉那个窗口即取消。</p>}
+          {phase === 'error' && <p className="small" style={{ color: 'var(--danger)', marginTop: 8 }}>{msg}</p>}
         </div>
       )}
       {tab === 'offline' && (
