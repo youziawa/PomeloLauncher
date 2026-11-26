@@ -15,7 +15,9 @@
 │   ├── crates/pomelo-downloader  # 镜像重写 / 并发下载 / SHA1 / natives
 │   ├── crates/pomelo-cli     # CLI：java / versions / install / launch / info
 │   └── app/                  # Tauri 2 桌面外壳（MSVC 构建）
-├── docs/                     # 企划书、M0 技术验证报告
+├── docs/                     # 企划书、M0 技术验证报告、实机截图
+├── scripts/                  # GitHub 定时同步（sync-github.* / register-sync-task.bat）
+│   └── dev/                  # 开发辅助（restore-window.ps1 等）
 └── dist/                     # 构建产物（单文件，可直接双击）
 ```
 

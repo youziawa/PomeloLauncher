@@ -67,14 +67,35 @@ export const deleteInstance = (id: string) => invoke<void>('delete_instance', { 
 export const installInstance = (id: string, mirror: boolean) => invoke<void>('install_instance', { id, mirror })
 export const installMod = (instanceId: string, slug: string, category: string) =>
   invoke<string>('install_mod', { instanceId, slug, category })
-export const launchInstance = (id: string, offlineName: string, memory: number) =>
-  invoke<number>('launch_instance', { id, offlineName, memory })
+export const launchInstance = (id: string, accountUuid: string, memory: number) =>
+  invoke<number>('launch_instance', { id, accountUuid, memory })
 export const stopGame = () => invoke<void>('stop_game')
 export const gameRunning = () => invoke<number | null>('game_running')
 export const readLog = (id: string, maxLines = 400) => invoke<string>('read_log', { id, maxLines })
 export const listAccounts = () => invoke<DesktopAccount[]>('list_accounts')
 export const addOfflineAccount = (name: string) => invoke<DesktopAccount[]>('add_offline_account', { name })
 export const removeAccount = (uuid: string) => invoke<DesktopAccount[]>('remove_account', { uuid })
+export const saveAccount = (account: DesktopAccount) => invoke<DesktopAccount[]>('save_account', { account })
+export const getMsClientId = () => invoke<string>('get_ms_client_id')
+export const setMsClientId = (clientId: string) => invoke<void>('set_ms_client_id', { clientId })
+export const exportHelpPack = (id: string) => invoke<string>('export_help_pack', { id })
+
+export interface DeviceCode {
+  device_code: string
+  user_code: string
+  verification_uri: string
+  expires_in: number
+  interval: number
+}
+export type DevicePoll =
+  | { status: 'pending' }
+  | { status: 'slow_down' }
+  | { status: 'expired' }
+  | { status: 'declined' }
+  | { status: 'success'; name: string; uuid: string; access_token: string; refresh_token?: string }
+  | { status: 'error'; message: string }
+export const msDeviceCode = (clientId: string) => invoke<DeviceCode>('ms_device_code', { clientId })
+export const msPoll = (clientId: string, deviceCode: string) => invoke<DevicePoll>('ms_poll', { clientId, deviceCode })
 export const openDataDir = () => invoke<void>('open_data_dir')
 
 /* 事件订阅（安装进度 / 游戏退出） */

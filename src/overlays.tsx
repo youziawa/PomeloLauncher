@@ -94,10 +94,15 @@ export function Wizard() {
   )
 }
 
-/* ---------------- 崩溃诊断弹窗 ---------------- */
+/* ---------------- 崩溃诊断弹窗（桌面：真实日志诊断；浏览器：演示） ---------------- */
 export function CrashModal() {
   const app = useApp()
   const [showDetail, setShowDetail] = useState(false)
+  const real = app.crashReport
+  const title = real?.title ?? CRASH_INFO.title
+  const cause = real?.cause ?? CRASH_INFO.cause
+  const suggestion = real?.suggestion ?? CRASH_INFO.suggestion
+  const detail = real ? real.log : CRASH_INFO.detail
   return (
     <Modal title="崩溃诊断" onClose={app.closeModal} className="crash-modal"
       footer={<>
@@ -107,19 +112,23 @@ export function CrashModal() {
       <div className="crash-head">
         <div className="ic"><Icon name="alert" /></div>
         <div>
-          <h3>{CRASH_INFO.title}</h3>
-          <p className="muted small">实例：崩溃演示实例 · 退出码 1 · 已自动收集 latest.log 与 crash-report</p>
+          <h3>{title}</h3>
+          <p className="muted small">
+            {real ? `进程退出码 ${real.code} · 已读取实例 logs/latest.log` : '实例：崩溃演示实例 · 退出码 1 · 已自动收集 latest.log 与 crash-report'}
+          </p>
         </div>
       </div>
       <div className="crash-cause">
-        <b>大概率原因：</b>{CRASH_INFO.cause}
+        <b>大概率原因：</b>{cause}
       </div>
-      <p className="small"><Icon name="zap" size={14} /> <b>建议：</b>{CRASH_INFO.suggestion}</p>
+      <p className="small"><Icon name="zap" size={14} /> <b>建议：</b>{suggestion}</p>
       <div className="crash-actions">
-        <button className="btn primary block" onClick={app.fixAndRelaunch}><Icon name="zap" />禁用 ExampleConflict 并重试</button>
+        {!real && (
+          <button className="btn primary block" onClick={app.fixAndRelaunch}><Icon name="zap" />禁用 ExampleConflict 并重试</button>
+        )}
         <button className="btn soft block" onClick={app.exportHelp}><Icon name="download" />导出求助包（已自动脱敏）</button>
       </div>
-      {showDetail && <pre className="crash-detail">{CRASH_INFO.detail}</pre>}
+      {showDetail && <pre className="crash-detail">{detail}</pre>}
     </Modal>
   )
 }

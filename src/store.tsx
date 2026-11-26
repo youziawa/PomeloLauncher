@@ -9,7 +9,7 @@ import {
 import {
   isDesktop, getSystemInfo, listInstances as listDesktopInstances, listAccounts as listDesktopAccounts,
   addOfflineAccount, removeAccount as removeDesktopAccount, installInstance as installDesktopInstance,
-  installMod as installDesktopMod,
+  installMod as installDesktopMod, readLog as readDesktopLog, exportHelpPack,
   launchInstance as launchDesktopInstance, stopGame as stopDesktopGame, onInstallProgress, onGameExit,
   updateInstance as updateDesktopInstance, listVersions,
   createInstance as createDesktopInstance,
@@ -186,6 +186,8 @@ interface Ctx {
   launch: LaunchState
   startLaunch: (id?: string) => void; stopLaunch: () => void
   fixAndRelaunch: () => void; exportHelp: () => void
+  crashReport: CrashReport | null
+  refreshAccounts: () => void
   settings: Settings; setSettings: (patch: Partial<Settings>) => void
   toasts: Toast[]; toast: (text: string, kind?: Toast['kind']) => void
   modal: ModalState; openModal: (m: ModalState) => void; closeModal: () => void
@@ -252,6 +254,51 @@ function mapDesktopAccount(a: DesktopAccount): Account {
   }
 }
 
+export interface CrashReport {
+  code: number
+  log: string
+  title: string
+  cause: string
+  suggestion: string
+}
+
+/* 轻量崩溃规则引擎（M1）：按日志特征给出人话诊断 */
+export function diagnoseLog(log: string): { title: string; cause: string; suggestion: string } {
+  if (/UnsupportedClassVersionError|requires Java|需要 Java|java 的 \d+ 及以上|Unrecognized option|Could not create the Java Virtual Machine/.test(log)) {
+    return {
+      title: 'Java 版本不匹配',
+      cause: '游戏或模组要求的 Java 版本高于当前启动所用版本。',
+      suggestion: '安装对应版本的 Java（如 26.x 需要 Java 25），或在实例设置中指定 Java 路径后重试。',
+    }
+  }
+  if (/Incompatible mods|Mod resolution failed|Missing or unsupported mandatory dependencies/.test(log)) {
+    return {
+      title: '模组依赖冲突',
+      cause: 'Fabric/Forge 解析模组依赖失败：缺少前置、版本不兼容或模组互相冲突。',
+      suggestion: '按日志中的 Fix 提示补齐/更换模组版本，或暂时移除最近安装的模组后重试。',
+    }
+  }
+  if (/OutOfMemoryError/.test(log)) {
+    return {
+      title: '内存不足',
+      cause: 'JVM 堆内存耗尽（-Xmx 过小或模组/光影占用过高）。',
+      suggestion: '在实例设置中提高内存分配，或关闭部分光影/大型模组后重试。',
+    }
+  }
+  if (/Mixin apply|MixinApplyError|InjectionError/.test(log)) {
+    return {
+      title: '模组 Mixin 冲突',
+      cause: '两个模组同时修改了同一处游戏代码，注入失败。',
+      suggestion: '更新冲突模组到兼容版本，或禁用其中之一后重试。',
+    }
+  }
+  return {
+    title: '游戏崩溃',
+    cause: '进程以非零退出码结束，日志中未命中已知规则。',
+    suggestion: '导出求助包（已脱敏）发到社区或交给 AI 分析；也可查看完整日志定位。',
+  }
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [page, setPage] = useState<Page>('home')
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -278,6 +325,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [dLaunch, setDLaunch] = useState<{ instanceId: string | null; pid: number | null; startedAt: number }>({
     instanceId: null, pid: null, startedAt: 0,
   })
+  const [crashReport, setCrashReport] = useState<CrashReport | null>(null)
+  const dLaunchRef = React.useRef(dLaunch)
+  dLaunchRef.current = dLaunch
   const desktopRef = React.useRef(desktop)
   desktopRef.current = desktop
 
@@ -341,13 +391,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => { alive = false }
   }, [desktopEnv])
 
-  /* 游戏退出事件 */
+  /* 游戏退出事件：非零退出码 → 真实崩溃诊断 */
   useEffect(() => {
     if (!desktop) return
     let un: (() => void) | undefined
-    onGameExit(() => {
+    onGameExit(code => {
+      const instId = dLaunchRef.current.instanceId
       setDLaunch({ instanceId: null, pid: null, startedAt: 0 })
-      toast('游戏已退出', 'info')
+      const n = typeof code === 'number' ? code : -1
+      if (n !== 0 && instId) {
+        readDesktopLog(instId, 300)
+          .then(log => {
+            setCrashReport({ code: n, log, ...diagnoseLog(log) })
+            setModal({ type: 'crash' })
+          })
+          .catch(() => {
+            setCrashReport({ code: n, log: '', title: '游戏崩溃', cause: `进程退出码 ${n}`, suggestion: '导出求助包发到社区分析。' })
+            setModal({ type: 'crash' })
+          })
+      } else {
+        toast('游戏已退出', 'info')
+      }
     }).then(u => { un = u }).catch(() => {})
     return () => { un?.() }
   }, [desktop, toast])
@@ -374,14 +438,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!inst) { toast('未选择实例', 'warning'); return }
       if (!inst.installed) { toast('请先安装游戏文件', 'warning'); return }
       const acc = accounts.find(a => a.id === currentAccId)
-      if (!acc || acc.kind !== 'offline') {
-        toast('桌面版当前支持离线账户启动；请添加离线账户（Microsoft 登录下个里程碑接入）', 'warning')
+      if (!acc) {
+        toast('请先添加账户（账户页）', 'warning')
         return
       }
       setCurrentId(inst.id)
       setPage('home')
       setDetailId(null)
-      launchDesktopInstance(inst.id, acc.name, inst.memoryMB)
+      launchDesktopInstance(inst.id, acc.id, inst.memoryMB)
         .then(pid => {
           setDLaunch({ instanceId: inst.id, pid, startedAt: Date.now() })
           toast('游戏已启动，正在加载资源…', 'success')
@@ -421,8 +485,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [toast])
 
   const exportHelp = useCallback(() => {
+    if (desktop) {
+      const id = dLaunchRef.current.instanceId ?? currentId
+      exportHelpPack(id)
+        .then(path => toast(`求助包已导出（已脱敏）：${path}`, 'success'))
+        .catch(e => toast(`导出失败：${e}`, 'danger'))
+      return
+    }
     toast('求助包已导出：pomelo-help-20261126.zip（用户名 / 路径 / 令牌已脱敏）', 'success')
-  }, [toast])
+  }, [toast, desktop, currentId])
+
+  const refreshAccounts = useCallback(() => {
+    if (!desktop) return
+    listDesktopAccounts()
+      .then(list => {
+        const mapped = list.map(mapDesktopAccount)
+        setAccounts(mapped)
+        setCurrentAccId(prev => (mapped.some(a => a.id === prev) ? prev : mapped[0]?.id ?? ''))
+      })
+      .catch(e => console.warn('refresh accounts failed', e))
+  }, [desktop])
 
   const installResource = useCallback((res: ResourceItem, withDeps: boolean, targetId?: string) => {
     if (desktop) {
@@ -667,7 +749,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     closeWizard: () => { setWizardOpen(false); localStorage.setItem('pomelo-demo-wizard', 'done') },
     openWizard: () => setWizardOpen(true),
     installedIds, installResource, createInstance, installGame,
-    desktop, versionOptions, dLaunch,
+    desktop, versionOptions, dLaunch, crashReport, refreshAccounts,
     toggleFavorite: id => setInstances(list => list.map(i => i.id === id ? { ...i, favorite: !i.favorite } : i)),
     updateInstance: (id, patch) => {
       if (desktop) {

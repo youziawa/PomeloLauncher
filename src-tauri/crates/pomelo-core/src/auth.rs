@@ -40,7 +40,7 @@ const DEVICE_CODE_ENDPOINT: &str =
 const TOKEN_ENDPOINT: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
 const SCOPE: &str = "XboxLive.signin offline_access";
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
 pub struct DeviceCode {
     pub device_code: String,
     pub user_code: String,
@@ -122,19 +122,81 @@ pub async fn poll_token(client_id: &str, device_code: &str) -> Result<MsToken> {
     Ok(resp.json::<MsToken>().await?)
 }
 
-/// 完整链路：MS 令牌 → Xbox Live → XSTS → Minecraft 令牌 → 档案
-pub async fn login_minecraft(client_id: &str, device_code: &str) -> Result<(McProfile, String)> {
-    let ms = poll_token(client_id, device_code).await?;
-    let client = http()?;
+/// 设备码轮询结果（供 UI 逐步展示）
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum DevicePoll {
+    Pending,
+    SlowDown,
+    Expired,
+    Declined,
+    Success {
+        name: String,
+        uuid: String,
+        access_token: String,
+        refresh_token: Option<String>,
+    },
+    Error { message: String },
+}
 
-    // 1) Xbox Live
+/// 单次轮询：把 OAuth 错误码翻译为 UI 状态
+pub async fn poll_device(client_id: &str, device_code: &str) -> DevicePoll {
+    let resp = match http() {
+        Ok(c) => c,
+        Err(e) => return DevicePoll::Error { message: e.to_string() },
+    };
+    let resp = match resp
+        .post(TOKEN_ENDPOINT)
+        .form(&[
+            ("client_id", client_id),
+            ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
+            ("device_code", device_code),
+        ])
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => return DevicePoll::Error { message: e.to_string() },
+    };
+    if resp.status().is_success() {
+        let ms: MsToken = match resp.json().await {
+            Ok(t) => t,
+            Err(e) => return DevicePoll::Error { message: e.to_string() },
+        };
+        return match login_minecraft_with_token(&ms.access_token).await {
+            Ok((profile, token)) => DevicePoll::Success {
+                name: profile.name,
+                uuid: profile.id,
+                access_token: token,
+                refresh_token: ms.refresh_token,
+            },
+            Err(e) => DevicePoll::Error { message: e.to_string() },
+        };
+    }
+    let body = resp.text().await.unwrap_or_default();
+    let err: String = serde_json::from_str::<serde_json::Value>(&body)
+        .ok()
+        .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(String::from))
+        .unwrap_or_default();
+    match err.as_str() {
+        "authorization_pending" => DevicePoll::Pending,
+        "slow_down" => DevicePoll::SlowDown,
+        "expired_token" => DevicePoll::Expired,
+        "authorization_declined" => DevicePoll::Declined,
+        _ => DevicePoll::Error { message: if err.is_empty() { body } else { err } },
+    }
+}
+
+/// 用已有 Microsoft 访问令牌走 XBL→XSTS→MC 链路
+pub async fn login_minecraft_with_token(ms_access_token: &str) -> Result<(McProfile, String)> {
+    let client = http()?;
     let xbl: XboxToken = client
         .post("https://user.auth.xboxlive.com/user/authenticate")
         .json(&serde_json::json!({
             "Properties": {
                 "AuthMethod": "RPS",
                 "SiteName": "user.auth.xboxlive.com",
-                "RpsTicket": format!("d={}", ms.access_token)
+                "RpsTicket": format!("d={}", ms_access_token)
             },
             "RelyingParty": "http://auth.xboxlive.com",
             "TokenType": "JWT"
@@ -144,15 +206,10 @@ pub async fn login_minecraft(client_id: &str, device_code: &str) -> Result<(McPr
         .error_for_status()?
         .json()
         .await?;
-
-    // 2) XSTS
     let xsts: XboxToken = client
         .post("https://xsts.auth.xboxlive.com/xsts/authorize")
         .json(&serde_json::json!({
-            "Properties": {
-                "SandboxId": "RETAIL",
-                "UserTokens": [xbl.token]
-            },
+            "Properties": { "SandboxId": "RETAIL", "UserTokens": [xbl.token] },
             "RelyingParty": "rp://api.minecraftservices.com/",
             "TokenType": "JWT"
         }))
@@ -161,21 +218,15 @@ pub async fn login_minecraft(client_id: &str, device_code: &str) -> Result<(McPr
         .error_for_status()?
         .json()
         .await?;
-
-    // 3) Minecraft 登录
     let uhs = xbl.display_claims.xui.first().map(|x| x.uhs.clone()).unwrap_or_default();
     let mc: McLogin = client
         .post("https://api.minecraftservices.com/authentication/login_with_xbox")
-        .json(&serde_json::json!({
-            "identityToken": format!("XBL3.0 x={};{}", uhs, xsts.token)
-        }))
+        .json(&serde_json::json!({ "identityToken": format!("XBL3.0 x={};{}", uhs, xsts.token) }))
         .send()
         .await?
         .error_for_status()?
         .json()
         .await?;
-
-    // 4) 档案
     let profile: McProfile = client
         .get("https://api.minecraftservices.com/minecraft/profile")
         .bearer_auth(&mc.access_token)
@@ -184,8 +235,13 @@ pub async fn login_minecraft(client_id: &str, device_code: &str) -> Result<(McPr
         .error_for_status()?
         .json()
         .await?;
-
     Ok((profile, mc.access_token))
+}
+
+/// 完整链路：MS 令牌 → Xbox Live → XSTS → Minecraft 令牌 → 档案
+pub async fn login_minecraft(client_id: &str, device_code: &str) -> Result<(McProfile, String)> {
+    let ms = poll_token(client_id, device_code).await?;
+    login_minecraft_with_token(&ms.access_token).await
 }
 
 /* ---------------- 账户存储（M0 明文；正式版迁移系统密钥环） ---------------- */

@@ -369,7 +369,7 @@ async fn launch_instance(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     id: String,
-    offline_name: String,
+    account_uuid: String,
     memory: u32,
 ) -> Result<u32, String> {
     let store = store_of(&state);
@@ -417,11 +417,26 @@ async fn launch_instance(
         }
     }
 
-    let account = OfflineAccount::new(&offline_name);
-    let args = pomelo_core::launch::build_arguments(&resolved, &paths, &inst, &account, memory, false, &env)
+    let accounts = load_accounts(&store.root).map_err(|e| e.to_string())?;
+    let stored = accounts.iter().find(|a| a.uuid == account_uuid);
+    let (name, uuid, token, is_ms) = match stored {
+        Some(a) => (a.name.clone(), a.uuid.clone(), a.access_token.clone(), a.kind == "microsoft"),
+        None => {
+            let o = OfflineAccount::new("Player");
+            (o.name, o.uuid, o.access_token, false)
+        }
+    };
+    let account = OfflineAccount { name, uuid, access_token: token };
+    let args = pomelo_core::launch::build_arguments(&resolved, &paths, &inst, &account, memory, is_ms, &env)
         .map_err(|e| e.to_string())?;
     let child = pomelo_core::launch::spawn(&java_path, &args, &paths.game_dir).map_err(|e| e.to_string())?;
     let pid = child.id();
+    let mut child = child;
+    pomelo_core::launch::pipe_to_log(
+        &mut child,
+        &store.game_dir(&inst.id).join("logs").join("launcher.log"),
+    )
+    .map_err(|e| e.to_string())?;
 
     let slot = state.game.clone();
     if let Ok(mut guard) = slot.lock() {
@@ -466,6 +481,103 @@ fn list_accounts(state: State<AppState>) -> Result<Vec<StoredAccount>, String> {
     load_accounts(&state.store.root).map_err(|e| e.to_string())
 }
 
+/// 保存（新增或按 uuid 覆盖）账户：微软登录成功后由前端调用
+#[tauri::command]
+fn save_account(state: State<AppState>, account: StoredAccount) -> Result<Vec<StoredAccount>, String> {
+    let mut accounts = load_accounts(&state.store.root).map_err(|e| e.to_string())?;
+    match accounts.iter_mut().find(|a| a.uuid == account.uuid) {
+        Some(existing) => *existing = account,
+        None => accounts.push(account),
+    }
+    save_accounts(&state.store.root, &accounts).map_err(|e| e.to_string())?;
+    Ok(accounts)
+}
+
+#[tauri::command]
+fn get_ms_client_id(state: State<AppState>) -> String {
+    let path = state.store.root.join("launcher_config.json");
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|v| v.get("ms_client_id").and_then(|x| x.as_str()).map(String::from))
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+fn set_ms_client_id(state: State<AppState>, client_id: String) -> Result<(), String> {
+    let path = state.store.root.join("launcher_config.json");
+    let mut v: serde_json::Value = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    v["ms_client_id"] = serde_json::Value::String(client_id);
+    std::fs::write(&path, serde_json::to_vec_pretty(&v).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn ms_device_code(client_id: String) -> Result<pomelo_core::auth::DeviceCode, String> {
+    if client_id.trim().is_empty() {
+        return Err("未配置 Azure 客户端 ID".into());
+    }
+    pomelo_core::auth::start_device_code(client_id.trim()).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn ms_poll(client_id: String, device_code: String) -> Result<pomelo_core::auth::DevicePoll, String> {
+    Ok(pomelo_core::auth::poll_device(client_id.trim(), &device_code).await)
+}
+
+/// 导出求助包：日志 + 实例元数据 + 模组清单（脱敏：不含令牌）
+#[tauri::command]
+fn export_help_pack(state: State<AppState>, id: String) -> Result<String, String> {
+    let store = store_of(&state);
+    let inst = store.load(&id).map_err(|e| e.to_string())?;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let dir = state.store.root.join("help").join(format!("{}-{}", id, stamp));
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let log = store.log_path(&id);
+    if log.exists() {
+        let text = std::fs::read_to_string(&log).unwrap_or_default();
+        // 脱敏：accessToken / uuid 之外的敏感串打码
+        let redacted = text
+            .replace(&inst.name, "<player>")
+            .lines()
+            .map(|l| {
+                if l.contains("accessToken") || l.contains("access_token") {
+                    "<redacted token line>".to_string()
+                } else {
+                    l.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(dir.join("latest.log"), redacted).map_err(|e| e.to_string())?;
+    }
+    let capture = store.game_dir(&id).join("logs").join("launcher.log");
+    if capture.exists() {
+        let _ = std::fs::copy(&capture, dir.join("launcher.log"));
+    }
+    let mut meta = serde_json::to_value(&inst).map_err(|e| e.to_string())?;
+    if let Some(obj) = meta.as_object_mut() {
+        obj.remove("java_path");
+    }
+    std::fs::write(dir.join("instance.json"), serde_json::to_vec_pretty(&meta).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    let mods_dir = store.game_dir(&id).join("mods");
+    let mut listing = String::new();
+    if let Ok(entries) = std::fs::read_dir(&mods_dir) {
+        for e in entries.flatten() {
+            listing.push_str(&e.file_name().to_string_lossy());
+            listing.push('\n');
+        }
+    }
+    std::fs::write(dir.join("mods.txt"), listing).map_err(|e| e.to_string())?;
+    Ok(dir.display().to_string())
+}
+
 #[tauri::command]
 fn add_offline_account(state: State<AppState>, name: String) -> Result<Vec<StoredAccount>, String> {
     let name = name.trim().to_string();
@@ -500,7 +612,12 @@ fn remove_account(state: State<AppState>, uuid: String) -> Result<Vec<StoredAcco
 
 #[tauri::command]
 fn read_log(state: State<AppState>, id: String, max_lines: usize) -> Result<String, String> {
-    let path = state.store.log_path(&id);
+    // 优先启动器捕获（含 JVM 早期 stderr），否则 MC 自身 latest.log
+    let capture = state.store.game_dir(&id).join("logs").join("launcher.log");
+    let mut path = capture;
+    if std::fs::metadata(&path).map(|m| m.len() == 0).unwrap_or(true) {
+        path = state.store.log_path(&id);
+    }
     let text = std::fs::read_to_string(path).unwrap_or_default();
     let lines: Vec<&str> = text.lines().collect();
     let start = lines.len().saturating_sub(max_lines.clamp(10, 5000));
@@ -531,6 +648,12 @@ fn main() {
             list_accounts,
             add_offline_account,
             remove_account,
+            save_account,
+            get_ms_client_id,
+            set_ms_client_id,
+            ms_device_code,
+            ms_poll,
+            export_help_pack,
             read_log
         ])
         .run(tauri::generate_context!())

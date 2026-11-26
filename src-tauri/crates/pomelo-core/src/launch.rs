@@ -184,7 +184,8 @@ pub fn pipe_to_log(child: &mut Child, log_path: &Path) -> Result<()> {
     }
     let mut file = std::fs::OpenOptions::new()
         .create(true)
-        .append(true)
+        .write(true)
+        .truncate(true)
         .open(log_path)?;
     if let Some(stdout) = child.stdout.take() {
         let mut file2 = file.try_clone()?;
