@@ -78,7 +78,9 @@ cargo run                # 或运行 target/debug/pomelo-launcher.exe
 
 ## 文档
 
-- [项目企划书](docs/项目企划书.md)：竞品调研、功能全集、UI 规范、架构、路线图（v1.3）
+- [AI 协作进度交接](docs/AI-PROGRESS.md)：**所有 AI/代理的进度权威与维护公约**（接手必读）
+- [AGENTS.md](AGENTS.md)：仓库级 AI 强制约定（交接维护/clean-room/双模式/测试）
+- [项目企划书](docs/项目企划书.md)：竞品调研、功能全集、UI 规范、架构、路线图（v1.6）
 - [M0 技术验证报告](docs/M0-技术验证.md)：核心能力、CLI 用法、测试结果、桌面构建与下一步
 
 ## 许可
