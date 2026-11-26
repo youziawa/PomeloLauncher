@@ -407,6 +407,50 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius
   animation: popIn 200ms var(--ease);
 }
 .modal.wide { width: 620px; }
+.modal.new-inst {
+  width: min(960px, calc(100vw - 48px));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.modal.new-inst .modal-body { overflow: hidden; display: flex; min-height: 0; }
+.modal.new-inst .modal-foot .spacer { flex: 1; }
+.dl-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  gap: 16px;
+  width: 100%;
+  height: min(520px, calc(100vh - 220px));
+  min-height: 360px;
+}
+.dl-col { display: flex; flex-direction: column; gap: 8px; min-height: 0; min-width: 0; }
+.dl-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.dl-tabs .chip { cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.dl-tabs .chip.primary { background: var(--primary); color: var(--on-primary); border-color: transparent; }
+.dl-list {
+  flex: 1;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  min-height: 0;
+}
+.dl-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; text-align: left;
+  padding: 8px 12px;
+  border: 0; border-bottom: 1px solid transparent;
+  background: transparent; color: inherit;
+  cursor: pointer; font: inherit;
+}
+.dl-item:hover { background: color-mix(in srgb, var(--primary) 10%, transparent); }
+.dl-item.active { background: color-mix(in srgb, var(--primary) 18%, transparent); }
+.dl-empty { margin: 0; padding: 16px; color: var(--muted); font-size: 0.86rem; line-height: 1.5; }
+.dl-foot-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 760px) {
+  .dl-layout { grid-template-columns: 1fr; height: auto; min-height: 0; }
+  .dl-list { max-height: 220px; flex: none; }
+}
 @keyframes popIn { from { opacity: 0; transform: translateY(10px) scale(0.98); } }
 .modal-head { display: flex; align-items: center; gap: 10px; padding: 16px 20px 0; }
 .modal-head h3 { flex: 1; }

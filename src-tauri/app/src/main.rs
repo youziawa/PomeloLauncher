@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 //! PomeloLauncher 桌面外壳（Tauri 2）
 //!
 //! 业务逻辑全部在 `pomelo-core` / `pomelo-downloader`，本层只做薄封装与事件桥接：
@@ -44,6 +46,13 @@ struct VersionInfo {
     id: String,
     kind: String,
     release_time: Option<String>,
+    latest: bool,
+}
+
+#[derive(Serialize, Clone)]
+struct LoaderBuildInfo {
+    version: String,
+    stable: bool,
 }
 
 fn store_of(state: &AppState) -> InstanceStore {
@@ -104,25 +113,45 @@ async fn create_instance(
     name: String,
     version: String,
     loader: String,
+    loader_version: Option<String>,
 ) -> Result<Instance, String> {
     let store = store_of(&state);
     let mut inst = store.create(&name, &version, &loader).map_err(|e| e.to_string())?;
-    if loader == "fabric" {
-        let (profile_id, profile) = pomelo_core::fabric::fabric_profile(&version)
+    let want = loader_version.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    if loader == "forge" || loader == "neoforge" {
+        inst.loader_version = want.map(|s| s.to_string());
+        store.save(&inst).map_err(|e| e.to_string())?;
+        return Ok(inst);
+    }
+    if loader == "fabric" || loader == "quilt" {
+        let base = if loader == "quilt" {
+            pomelo_core::loaders::QUILT_META
+        } else {
+            pomelo_core::loaders::FABRIC_META
+        };
+        let (profile_id, profile) = pomelo_core::loaders::meta_profile(base, &version, want)
             .await
             .map_err(|e| e.to_string())?;
         let dir = store.versions_dir(&inst.id).join(&profile_id);
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        std::fs::write(dir.join(format!("{}.json", profile_id)), serde_json::to_vec_pretty(&profile).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
+        std::fs::write(
+            dir.join(format!("{}.json", profile_id)),
+            serde_json::to_vec_pretty(&profile).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
         inst.launch_version = Some(profile_id);
+        let marker = if loader == "quilt" {
+            "org.quiltmc:quilt-loader:"
+        } else {
+            "net.fabricmc:fabric-loader:"
+        };
         inst.loader_version = profile.libraries.iter().find_map(|l| {
-            if l.name.starts_with("net.fabricmc:fabric-loader:") {
+            if l.name.starts_with(marker) {
                 Some(l.name.rsplit(':').next().unwrap_or("").to_string())
             } else {
                 None
             }
-        });
+        }).or_else(|| want.map(|s| s.to_string()));
         store.save(&inst).map_err(|e| e.to_string())?;
         install_chain(&app, &store, &inst, true).await?;
         inst = store.load(&inst.id).map_err(|e| e.to_string())?;
@@ -178,21 +207,45 @@ fn open_data_dir(state: State<AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn list_versions(limit: usize) -> Result<Vec<VersionInfo>, String> {
+async fn list_versions(kind: Option<String>, limit: Option<usize>) -> Result<Vec<VersionInfo>, String> {
     let manifest = pomelo_core::meta::fetch_manifest_fallback(&[
         pomelo_core::meta::OFFICIAL_MANIFEST,
         pomelo_core::meta::BMCLAPI_MANIFEST,
     ])
     .await
     .map_err(|e| e.to_string())?;
+    let filter = kind.unwrap_or_else(|| "release".into());
+    let cap = limit.unwrap_or(40);
+    let latest_release = manifest.latest.release.clone();
+    let latest_snapshot = manifest.latest.snapshot.clone();
     let mut out = Vec::new();
-    for v in manifest.versions.into_iter().filter(|v| v.kind == "release") {
-        out.push(VersionInfo { id: v.id, kind: v.kind, release_time: v.release_time });
-        if out.len() >= limit.clamp(1, 100) {
+    for v in manifest.versions {
+        let ok = match filter.as_str() {
+            "all" => true,
+            "old" => v.kind == "old_alpha" || v.kind == "old_beta",
+            other => v.kind == other,
+        };
+        if !ok {
+            continue;
+        }
+        let latest = v.id == latest_release || v.id == latest_snapshot;
+        out.push(VersionInfo { id: v.id, kind: v.kind, release_time: v.release_time, latest });
+        if cap > 0 && out.len() >= cap {
             break;
         }
     }
     Ok(out)
+}
+
+#[tauri::command]
+async fn list_loader_versions(game_version: String, loader: String) -> Result<Vec<LoaderBuildInfo>, String> {
+    let builds = pomelo_core::loaders::list_for(loader.trim(), game_version.trim())
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(builds
+        .into_iter()
+        .map(|b| LoaderBuildInfo { version: b.version, stable: b.stable })
+        .collect())
 }
 
 /* ---------------- 安装 ---------------- */
@@ -635,6 +688,7 @@ fn main() {
             system_info,
             list_java,
             list_versions,
+            list_loader_versions,
             list_instances,
             game_running,
             stop_game,

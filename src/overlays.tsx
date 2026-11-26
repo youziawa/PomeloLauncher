@@ -1,8 +1,9 @@
 /* 弹层：首启向导 / 崩溃诊断 / 新建实例 / 依赖安装确认 */
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from './store'
 import { Icon, Logo, Modal, Select } from './ui'
 import { CRASH_INFO, uid, LoaderType } from './mock'
+import { isDesktop, listLoaderVersions, listVersions, LoaderBuild, DesktopVersion } from './desktop'
 
 /* ---------------- 首启向导（三步开玩） ---------------- */
 export function Wizard() {
@@ -133,52 +134,251 @@ export function CrashModal() {
   )
 }
 
-/* ---------------- 新建实例 ---------------- */
+/* ---------------- 新建实例（版本目录 + 加载器版本） ---------------- */
+
+const KIND_TABS: { id: string; label: string }[] = [
+  { id: 'release', label: '正式版' },
+  { id: 'snapshot', label: '快照' },
+  { id: 'old', label: '远古' },
+  { id: 'all', label: '全部' },
+]
+
+const LOADERS: { id: LoaderType; hint: string; installs: boolean }[] = [
+  { id: 'Vanilla', hint: '不安装加载器', installs: true },
+  { id: 'Fabric', hint: '创建时安装所选版本', installs: true },
+  { id: 'Quilt', hint: '创建时安装所选版本', installs: true },
+  { id: 'Forge', hint: '可选版本，安装器尚未接入', installs: false },
+  { id: 'NeoForge', hint: '可选版本，安装器尚未接入', installs: false },
+]
+
+const DEMO_VERSIONS: DesktopVersion[] = [
+  { id: '1.21.4', kind: 'release', latest: true },
+  { id: '1.21.1', kind: 'release' },
+  { id: '1.21', kind: 'release' },
+  { id: '1.20.6', kind: 'release' },
+  { id: '1.20.4', kind: 'release' },
+  { id: '1.20.1', kind: 'release' },
+  { id: '1.19.4', kind: 'release' },
+  { id: '1.19.2', kind: 'release' },
+  { id: '1.18.2', kind: 'release' },
+  { id: '1.17.1', kind: 'release' },
+  { id: '1.16.5', kind: 'release' },
+  { id: '1.12.2', kind: 'release' },
+  { id: '1.8.9', kind: 'release' },
+  { id: '1.7.10', kind: 'release' },
+  { id: '24w14a', kind: 'snapshot' },
+  { id: 'b1.7.3', kind: 'old_beta' },
+  { id: 'a1.2.6', kind: 'old_alpha' },
+]
+
+const DEMO_BUILDS: Record<string, LoaderBuild[]> = {
+  Fabric: [
+    { version: '0.16.10', stable: true },
+    { version: '0.16.9', stable: true },
+    { version: '0.15.11', stable: true },
+  ],
+  Quilt: [{ version: '0.27.1', stable: true }, { version: '0.26.4', stable: false }],
+  Forge: [{ version: '47.3.0', stable: true }, { version: '47.2.0', stable: false }],
+  NeoForge: [{ version: '21.1.72', stable: true }, { version: '21.1.1', stable: false }],
+}
+
+function kindMatches(kind: string, tab: string) {
+  if (tab === 'all') return true
+  if (tab === 'old') return kind === 'old_alpha' || kind === 'old_beta'
+  return kind === tab
+}
+
 export function NewInstanceModal() {
   const app = useApp()
-  const [name, setName] = useState('')
-  const desktopVersions = app.desktop && app.versionOptions.length > 0 ? app.versionOptions.slice(0, 25) : []
-  const versions = desktopVersions.length > 0
-    ? desktopVersions
-    : ['1.21.4', '1.21.1', '1.20.1', '1.19.4', 'b1.7.3']
-  const [ver, setVer] = useState('')
+  const desktop = isDesktop()
+  const [versions, setVersions] = useState<DesktopVersion[]>(desktop ? [] : DEMO_VERSIONS)
+  const [verState, setVerState] = useState<'loading' | 'ready' | 'error'>(desktop ? 'loading' : 'ready')
+  const [tab, setTab] = useState('release')
+  const [query, setQuery] = useState('')
+  const [ver, setVer] = useState(desktop ? '' : '1.21.4')
+  const [name, setName] = useState(desktop ? '' : '1.21.4')
+  const nameDirty = useRef(false)
   const [loader, setLoader] = useState<LoaderType>('Vanilla')
-  const effectiveVer = ver || versions[0]
+  const [builds, setBuilds] = useState<LoaderBuild[]>([])
+  const [buildState, setBuildState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [loaderVer, setLoaderVer] = useState('')
+
+  useEffect(() => {
+    let on = true
+    const apply = (list: DesktopVersion[]) => {
+      if (!on || list.length === 0) return
+      setVersions(list)
+      const pick = list.find(v => v.latest && v.kind === 'release') ?? list.find(v => v.kind === 'release') ?? list[0]
+      if (pick) {
+        setVer(pick.id)
+        setName(n => nameDirty.current ? n : pick.id)
+      }
+      setVerState('ready')
+    }
+    if (desktop) {
+      listVersions(0, 'all').then(apply).catch(() => { if (on) setVerState('error') })
+    } else {
+      fetch('https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json')
+        .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
+        .then((man: { versions?: { id: string; type: string }[]; latest?: { release?: string; snapshot?: string } }) => {
+          const latestRelease = man.latest?.release
+          const latestSnapshot = man.latest?.snapshot
+          const list = (man.versions ?? []).map(v => ({
+            id: v.id,
+            kind: v.type,
+            latest: v.id === latestRelease || v.id === latestSnapshot,
+          }))
+          apply(list)
+        })
+        .catch(() => { /* 浏览器跨域失败时沿用内置目录 */ })
+    }
+    return () => { on = false }
+  }, [desktop])
+
+  useEffect(() => {
+    if (loader === 'Vanilla' || !ver) {
+      setBuilds([])
+      setLoaderVer('')
+      setBuildState('idle')
+      return
+    }
+    let on = true
+    setBuildState('loading')
+    const apply = (list: LoaderBuild[]) => {
+      if (!on) return
+      setBuilds(list)
+      const pick = list.find(b => b.stable) ?? list[0]
+      setLoaderVer(pick?.version ?? '')
+      setBuildState(list.length ? 'ready' : 'ready')
+    }
+    const fallback = () => apply(DEMO_BUILDS[loader] ?? [])
+    if (desktop) {
+      listLoaderVersions(ver, loader.toLowerCase())
+        .then(apply)
+        .catch(() => { if (on) { setBuilds([]); setLoaderVer(''); setBuildState('error') } })
+    } else if (loader === 'Fabric' || loader === 'Quilt') {
+      const base = loader === 'Quilt'
+        ? `https://meta.quiltmc.org/v3/versions/loader/${encodeURIComponent(ver)}`
+        : `https://meta.fabricmc.net/v2/versions/loader/${encodeURIComponent(ver)}`
+      fetch(base)
+        .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
+        .then((rows: { loader?: { version?: string; stable?: boolean } }[]) => {
+          const list = rows.map(row => ({ version: row.loader?.version ?? '', stable: !!row.loader?.stable })).filter(b => b.version)
+          if (list.length === 0) fallback()
+          else apply(list)
+        })
+        .catch(fallback)
+    } else {
+      const url = loader === 'NeoForge'
+        ? `https://bmclapi2.bangbang93.com/neoforge/list/${encodeURIComponent(ver)}`
+        : `https://bmclapi2.bangbang93.com/forge/minecraft/${encodeURIComponent(ver)}`
+      fetch(url)
+        .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
+        .then((rows: { version?: string }[]) => {
+          const list = rows.map(row => row.version).filter((v): v is string => !!v)
+          list.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+          const unique = [...new Set(list)].map((version, i) => ({ version, stable: i === 0 }))
+          if (unique.length === 0) fallback()
+          else apply(unique)
+        })
+        .catch(fallback)
+    }
+    return () => { on = false }
+  }, [desktop, loader, ver])
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return versions.filter(v => kindMatches(v.kind, tab) && (!q || v.id.toLowerCase().includes(q)))
+  }, [versions, tab, query])
+
+  const pickVersion = (id: string) => {
+    setVer(id)
+    if (!nameDirty) setName(id)
+  }
+
+  const loaderMeta = LOADERS.find(l => l.id === loader)!
+  const needsBuild = loader !== 'Vanilla'
+  const canCreate = name.trim().length > 0 && !!ver && (!needsBuild || !!loaderVer) && buildState !== 'loading' && buildState !== 'error'
+  const actionLabel = loader === 'Fabric' || loader === 'Quilt' ? '创建并安装' : '创建实例'
+
   return (
-    <Modal title="新建实例" onClose={app.closeModal}
+    <Modal title="新建实例" onClose={app.closeModal} className="new-inst"
       footer={<>
+        <span className="muted small dl-foot-note">
+          {ver ? `${ver}${loader === 'Vanilla' ? ' · 原版' : ` · ${loader} ${loaderVer}`}` : '先选一个游戏版本'}
+        </span>
+        <span className="spacer" />
         <button className="btn ghost" onClick={app.closeModal}>取消</button>
-        <button className="btn primary" disabled={name.trim().length === 0} onClick={() => app.createInstance(name.trim(), effectiveVer, loader)}>创建实例</button>
+        <button className="btn primary" disabled={!canCreate}
+          onClick={() => app.createInstance(name.trim(), ver, loader, needsBuild ? loaderVer : undefined)}>
+          {actionLabel}
+        </button>
       </>}>
-      <div className="settings-form">
-        <div className="field">
-          <label>实例名称</label>
-          <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="例如：我的光影世界" autoFocus />
+      <div className="dl-layout">
+        <div className="dl-col">
+          <input className="input" value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索版本，如 1.20.1" aria-label="搜索游戏版本" />
+          <div className="dl-tabs" role="tablist" aria-label="版本类型">
+            {KIND_TABS.map(t => (
+              <button key={t.id} type="button" role="tab" aria-selected={tab === t.id}
+                className={`chip ${tab === t.id ? 'primary' : 'outline'}`} onClick={() => setTab(t.id)}>{t.label}</button>
+            ))}
+          </div>
+          <div className="dl-list" role="listbox" aria-label="游戏版本">
+            {verState === 'loading' && <p className="dl-empty">正在获取 Mojang 版本清单…</p>}
+            {verState === 'error' && <p className="dl-empty">版本清单获取失败，请检查网络后重开此窗口。</p>}
+            {verState === 'ready' && shown.length === 0 && <p className="dl-empty">没有匹配的版本</p>}
+            {verState === 'ready' && shown.map(v => (
+              <button key={v.id} type="button" role="option" aria-selected={v.id === ver}
+                className={`dl-item${v.id === ver ? ' active' : ''}`} onClick={() => pickVersion(v.id)}>
+                <span className="num">{v.id}</span>
+                {v.latest && <span className="chip accent">最新</span>}
+                {v.kind !== 'release' && <span className="chip outline">{v.kind === 'snapshot' ? '快照' : v.kind === 'old_beta' ? 'Beta' : v.kind === 'old_alpha' ? 'Alpha' : v.kind}</span>}
+              </button>
+            ))}
+          </div>
+          <span className="hint">{verState === 'ready' ? `${shown.length} 个版本` : ' '}</span>
         </div>
-        <div className="field">
-          <label>游戏版本</label>
-          <Select ariaLabel="游戏版本" width="100%" value={effectiveVer} onChange={setVer} options={versions.map(v => ({ value: v, label: v }))} />
-          <span className="hint">{app.desktop ? '版本列表来自 Mojang 清单（实时）' : '快照 / 愚人节版 / 远古版完整版可在版本过滤器中选择'}</span>
+
+        <div className="dl-col">
+          <div className="field">
+            <label htmlFor="inst-name">实例名称</label>
+            <input id="inst-name" className="input" value={name} autoFocus
+              onChange={e => { nameDirty.current = true; setName(e.target.value) }} placeholder="默认使用游戏版本号" />
+          </div>
+          <div className="dl-tabs" role="tablist" aria-label="模组加载器">
+            {LOADERS.map(l => (
+              <button key={l.id} type="button" role="tab" aria-selected={loader === l.id}
+                className={`chip ${loader === l.id ? 'primary' : 'outline'}`} onClick={() => setLoader(l.id)}>
+                {l.id === 'Vanilla' ? '原版' : l.id}
+              </button>
+            ))}
+          </div>
+          <p className="hint" style={{ margin: 0 }}>{loaderMeta.hint}</p>
+          {loader === 'Vanilla' ? (
+            <div className="dl-list">
+              <p className="dl-empty">原版不需要加载器。创建后到实例页确认安装游戏文件。</p>
+            </div>
+          ) : (
+            <div className="dl-list" role="listbox" aria-label={`${loader} 版本`}>
+              {buildState === 'loading' && <p className="dl-empty">正在获取 {loader} 版本…</p>}
+              {buildState === 'error' && <p className="dl-empty">{loader} 版本获取失败。</p>}
+              {buildState === 'ready' && builds.length === 0 && <p className="dl-empty">这个游戏版本没有可用的 {loader}。</p>}
+              {buildState !== 'loading' && builds.map(b => (
+                <button key={b.version} type="button" role="option" aria-selected={b.version === loaderVer}
+                  className={`dl-item${b.version === loaderVer ? ' active' : ''}`} onClick={() => setLoaderVer(b.version)}>
+                  <span className="num">{b.version}</span>
+                  {b.stable && <span className="chip success">稳定</span>}
+                </button>
+              ))}
+            </div>
+          )}
+          {!loaderMeta.installs && loader !== 'Vanilla' && (
+            <span className="hint">Forge / NeoForge 的版本可以先选好并记到实例上。一键安装目前支持原版、Fabric 和 Quilt。</span>
+          )}
+          {(loader === 'Fabric' || loader === 'Quilt') && (
+            <span className="hint">点「创建并安装」会下载所选加载器和游戏文件，请保持网络可用。</span>
+          )}
         </div>
-        <div className="field">
-          <label>模组加载器</label>
-          <Select ariaLabel="模组加载器" width="100%" value={loader} onChange={v => setLoader(v as LoaderType)} options={
-            app.desktop
-              ? [
-                { value: 'Vanilla', label: '原版（不安装加载器）' },
-                { value: 'Fabric', label: 'Fabric（创建时自动安装加载器与游戏文件）' },
-              ]
-              : [
-                { value: 'Vanilla', label: '原版（不安装加载器）' },
-                { value: 'Fabric', label: 'Fabric（轻量，推荐新手）' },
-                { value: 'Forge', label: 'Forge（大型模组生态）' },
-                { value: 'NeoForge', label: 'NeoForge' },
-                { value: 'Quilt', label: 'Quilt' },
-              ]
-          } />
-          <span className="hint">{app.desktop ? 'Forge/NeoForge 安装器将在 M1 后续接入' : 'OptiFine / LiteLoader 等将在正式版 M2 提供'}</span>
-        </div>
-        <p className="muted small">创建后不会自动下载游戏文件；在实例页点击「安装游戏文件」并由你确认后才会开始下载。</p>
       </div>
     </Modal>
   )

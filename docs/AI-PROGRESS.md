@@ -1,7 +1,7 @@
 # AI 协作进度交接文档（AI-PROGRESS）
 
 > **本文件是所有参与本项目的 AI/代理的唯一进度权威来源。**
-> 最后更新：2026-11-26 10:20 (Asia/Shanghai) · 更新者：lead (qwen4-max)
+> 最后更新：2026-11-26 10:34 (Asia/Shanghai) · 更新者：Cursor (grok-4.7)
 > 配套强制约定见仓库根 [AGENTS.md](../AGENTS.md)（已被 DSH harness 作为工作区指令自动加载，实测生效）。
 
 ---
@@ -22,7 +22,7 @@
 ## 1. 当前状态
 
 - **阶段**：M1 进行中（M0 已完成并实测）。
-- **进行中**：无（lead 于 2026-11-26 10:15 完成微软登录 UI/崩溃诊断/目录整理后空闲）。
+- **进行中**：Cursor（grok-4.7）正在重做新建实例页：完整游戏版本列表 + 可选择的加载器版本。
 - **已完成且实测**：
   | 能力 | 证据 |
   | --- | --- |
@@ -86,6 +86,8 @@ POMELO_ROOT=D:/Project/PomeloLauncher/.m0-data ./src-tauri/app/target/release/po
 8. **许可_clean-room**：Apache-2.0；禁止复制 HMCL/SJMCL(GPL)/PCL(自定义)/BakaXL(闭源) 代码；只借鉴思想与公开协议。
 9. **设计权威**：UI 改动遵循企划书 §6 / DESIGN.md（Pomelo Garden）；桌面模式不得 reintroduce 内层假窗口边框（.desktop-mode）。
 10. 本机 Java：8/17/21/24/25 均在；gh 已登录 youziawa；WebView2 已装。
+11. **编译缓存已清（2026-11-26）**：`src-tauri/target/debug`、`src-tauri/app/target/debug` 与两处 `release/build` 已删除。保留 `pomelo.exe`、`pomelo-launcher.exe`、`WebView2Loader.dll`（dll 必须留在 exe 旁）。下次 `cargo build` / `cargo test` 会全量重编。`.m0-data` 两个实测实例未动。
+12. **桌面 exe 必须是 GUI subsystem**：GNU 默认编出控制台程序（PE subsystem=3）。双击会弹出终端，关掉终端进程就退出。`main.rs` 已加 `#![windows_subsystem = "windows"]`；当前 release exe 已把 subsystem 改成 2（未全量重编）。CLI `pomelo.exe` 保持控制台。
 
 ## 5. Backlog（按建议顺序）
 
@@ -104,6 +106,8 @@ POMELO_ROOT=D:/Project/PomeloLauncher/.m0-data ./src-tauri/app/target/release/po
 | 2026-11-26 10:0x | lead(qwen4-max) | 微软设备码 UI、真实崩溃诊断+求助包、目录整理 | Java8 崩溃弹窗命中、help/ 四文件 | Forge/NeoForge |
 | 2026-11-26 10:15 | lead(qwen4-max) | 建立本交接文档 + AGENTS.md 强制维护约定 | 文件入库 | 所有代理遵守 §0 |
 | 2026-11-26 10:20 | lead(qwen4-max) | AGENTS.md 被 harness 自动加载为工作区指令；README 增加交接入口 | 系统指令回显确认 | 后续代理开工必读 |
+| 2026-11-26 10:23 | Cursor(grok-4.7) | 删除 Cargo debug 与 release/build 缓存、空日志、app/gen；保留两个 release exe 与 WebView2Loader.dll | 删后 src-tauri 从约 6809MB 降到 42.6MB；exe 与 dll 仍在 | 下次 cargo 全量重编；.m0-data 约 1118MB 仍保留 |
+| 2026-11-26 10:34 | Cursor(grok-4.7) | 桌面 exe 从控制台子系统改为窗口子系统，避免双击闪终端后退出 | PE subsystem 3→2；Start-Process 后窗口标题 PomeloLauncher 且进程未退出 | 下次 cargo build 由 windows_subsystem 属性保持 |
 
 ## 7. 归档
 

@@ -38,6 +38,12 @@ export interface DesktopVersion {
   id: string
   kind: string
   release_time?: string
+  latest?: boolean
+}
+
+export interface LoaderBuild {
+  version: string
+  stable: boolean
 }
 
 export interface InstallProgress {
@@ -58,9 +64,12 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 export const getSystemInfo = () => invoke<SystemInfo>('system_info')
 export const listJava = () => invoke<JavaInfo[]>('list_java')
 export const listInstances = () => invoke<DesktopInstance[]>('list_instances')
-export const listVersions = (limit = 30) => invoke<DesktopVersion[]>('list_versions', { limit })
-export const createInstance = (name: string, version: string, loader: string) =>
-  invoke<DesktopInstance>('create_instance', { name, version, loader })
+export const listVersions = (limit = 30, kind = 'release') =>
+  invoke<DesktopVersion[]>('list_versions', { limit, kind })
+export const listLoaderVersions = (gameVersion: string, loader: string) =>
+  invoke<LoaderBuild[]>('list_loader_versions', { gameVersion, loader })
+export const createInstance = (name: string, version: string, loader: string, loaderVersion?: string) =>
+  invoke<DesktopInstance>('create_instance', { name, version, loader, loaderVersion })
 export const updateInstance = (id: string, memoryMb?: number, javaPath?: string) =>
   invoke<DesktopInstance>('update_instance', { id, memoryMb, javaPath })
 export const deleteInstance = (id: string) => invoke<void>('delete_instance', { id })

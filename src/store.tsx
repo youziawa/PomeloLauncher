@@ -194,7 +194,7 @@ interface Ctx {
   wizardOpen: boolean; closeWizard: () => void; openWizard: () => void
   installedIds: string[]
   installResource: (res: ResourceItem, withDeps: boolean, targetId?: string) => void
-  createInstance: (name: string, ver: string, loader: LoaderType) => void
+  createInstance: (name: string, ver: string, loader: LoaderType, loaderVersion?: string) => void
   installGame: (id: string) => void
   toggleFavorite: (id: string) => void
   updateInstance: (id: string, patch: Partial<Instance>) => void
@@ -579,23 +579,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setModal(null)
   }, [addTask, instances, currentId, settings.memory, toast, desktop])
 
-  const createInstance = useCallback((name: string, ver: string, loader: LoaderType) => {
+  const createInstance = useCallback((name: string, ver: string, loader: LoaderType, loaderVersion?: string) => {
     if (desktop) {
       const backendLoader = loader.toLowerCase()
       ;(async () => {
         try {
-          const created = await createDesktopInstance(name, ver, backendLoader)
+          const created = await createDesktopInstance(name, ver, backendLoader, loaderVersion)
           const list = await listDesktopInstances()
           const mapped = list.map(mapDesktopInstance)
           setInstances(mapped)
           setCurrentId(created.id)
           setModal(null)
           setPage('instances')
+          const verNote = loaderVersion ? ` ${loaderVersion}` : ''
           toast(
-            loader === 'Fabric'
-              ? `实例「${name}」已创建，Fabric 加载器与游戏文件安装完成`
-              : `实例「${name}」已创建 · 游戏文件需在实例页确认安装`,
-            'success',
+            loader === 'Fabric' || loader === 'Quilt'
+              ? `实例「${name}」已创建，${loader}${verNote} 与游戏文件安装完成`
+              : loader === 'Forge' || loader === 'NeoForge'
+                ? `实例「${name}」已记下 ${loader}${verNote}。安装器还没接入，游戏文件需在实例页按原版安装`
+                : `实例「${name}」已创建 · 游戏文件需在实例页确认安装`,
+            loader === 'Forge' || loader === 'NeoForge' ? 'warning' : 'success',
           )
         } catch (e) {
           toast(`创建失败：${e}`, 'danger')
@@ -607,7 +610,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const tags: TagColor[] = ['green', 'blue', 'yellow', 'pink', 'purple', 'teal']
     setInstances(list => [{
       id, name, mcVersion: ver, loader,
-      loaderVersion: loader === 'Fabric' ? '0.16.9' : loader === 'Forge' ? '47.3.0' : loader === 'NeoForge' ? '21.1.72' : loader === 'Quilt' ? '0.27.0' : undefined,
+      loaderVersion,
       icon: 'grass', tag: tags[list.length % tags.length], favorite: false,
       lastPlayed: '从未', playTime: '0 小时', modsCount: 0, memoryMB: settings.memory,
       java: ver.startsWith('b') || ver.startsWith('a') ? 'Java 8（自动）' : 'Java 21（自动）', isolation: true, installed: false,
