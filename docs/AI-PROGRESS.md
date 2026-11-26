@@ -1,7 +1,7 @@
 # AI 协作进度交接文档（AI-PROGRESS）
 
 > **本文件是所有参与本项目的 AI/代理的唯一进度权威来源。**
-> 最后更新：2026-11-26 11:10 (Asia/Shanghai) · 更新者：Cursor (grok-4.7)
+> 最后更新：2026-11-26 16:06 (Asia/Shanghai) · 更新者：Cursor (grok-4.7)
 > 配套强制约定见仓库根 [AGENTS.md](../AGENTS.md)（已被 DSH harness 作为工作区指令自动加载，实测生效）。
 
 ---
@@ -22,7 +22,7 @@
 ## 1. 当前状态
 
 - **阶段**：M1 进行中（M0 已完成并实测）。
-- **进行中**：无（Cursor 于 2026-11-26 11:38 接入 Forge/NeoForge 官方安装器后空闲）。
+- **进行中**：无（Cursor 于 2026-11-26 16:06 清完编译缓存后空闲）。
 - **已完成且实测**：
   | 能力 | 证据 |
   | --- | --- |
@@ -115,6 +115,7 @@ POMELO_ROOT=D:/Project/PomeloLauncher/.m0-data ./src-tauri/app/target/release/po
 | 2026-11-26 11:18 | Cursor(grok-4.7) | 修复登录窗口秒关：授权 URL 里的 redirect 不再被当成回跳 | 单测 authorize_url_is_not_a_callback | 待用户再登一次 |
 | 2026-11-26 11:28 | Cursor(grok-4.7) | 版本/实例默认图标换成 Minecraft Wiki 官方方块渲染，按版本年代区分 | 材质来自 minecraft.wiki/images | 嵌入桌面版后目视 |
 | 2026-11-26 11:38 | Cursor(grok-4.7) | Forge/NeoForge 创建时下载官方安装器并以 --installClient 装进实例目录 | installer URL 单测；NeoForge --help 确认参数；release 编译 | 未在本机完整跑完一次 Forge 安装 |
+| 2026-11-26 16:06 | Cursor(grok-4.7) | 再清 Cargo debug/release 缓存、安装器日志和临时 jar | src-tauri 从约 2076MB 降到 43.4MB；exe 与 dll 仍在 | .m0-data 实测实例保留 |
 
 ## 7. 归档
 
