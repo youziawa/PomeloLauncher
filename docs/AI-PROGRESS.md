@@ -22,7 +22,7 @@
 ## 1. 当前状态
 
 - **阶段**：M1 进行中（M0 已完成并实测）。
-- **进行中**：无（Cursor 于 2026-11-26 11:10 把微软登录改成浏览器授权码后空闲）。
+- **进行中**：无（Cursor 于 2026-11-26 11:38 接入 Forge/NeoForge 官方安装器后空闲）。
 - **已完成且实测**：
   | 能力 | 证据 |
   | --- | --- |
@@ -113,6 +113,8 @@ POMELO_ROOT=D:/Project/PomeloLauncher/.m0-data ./src-tauri/app/target/release/po
 | 2026-11-26 11:10 | Cursor(grok-4.7) | 微软正版登录改为系统浏览器授权码 + PKCE + localhost 回跳 | auth PKCE 测试 2 项；release 编译成功 | 端到端登录待有 Azure 客户端 ID 实测；重定向须注册 http://localhost |
 | 2026-11-26 11:15 | Cursor(grok-4.7) | 去掉 Azure 客户端 ID 输入；登录窗口用公开 Minecraft 客户端拦截授权码 | release 编译成功 | 端到端登录待用户在弹出窗口实测 |
 | 2026-11-26 11:18 | Cursor(grok-4.7) | 修复登录窗口秒关：授权 URL 里的 redirect 不再被当成回跳 | 单测 authorize_url_is_not_a_callback | 待用户再登一次 |
+| 2026-11-26 11:28 | Cursor(grok-4.7) | 版本/实例默认图标换成 Minecraft Wiki 官方方块渲染，按版本年代区分 | 材质来自 minecraft.wiki/images | 嵌入桌面版后目视 |
+| 2026-11-26 11:38 | Cursor(grok-4.7) | Forge/NeoForge 创建时下载官方安装器并以 --installClient 装进实例目录 | installer URL 单测；NeoForge --help 确认参数；release 编译 | 未在本机完整跑完一次 Forge 安装 |
 
 ## 7. 归档
 

@@ -122,6 +122,8 @@ async fn create_instance(
     if loader == "forge" || loader == "neoforge" {
         inst.loader_version = want.map(|s| s.to_string());
         store.save(&inst).map_err(|e| e.to_string())?;
+        install_with_loader(&app, &store, &inst.id, true).await?;
+        inst = store.load(&inst.id).map_err(|e| e.to_string())?;
         return Ok(inst);
     }
     if loader == "fabric" || loader == "quilt" {
@@ -382,8 +384,96 @@ async fn install_chain(app: &tauri::AppHandle, store: &InstanceStore, inst: &Ins
 #[tauri::command]
 async fn install_instance(app: tauri::AppHandle, state: State<'_, AppState>, id: String, mirror: bool) -> Result<(), String> {
     let store = store_of(&state);
-    let inst = store.load(&id).map_err(|e| e.to_string())?;
-    install_chain(&app, &store, &inst, mirror).await
+    install_with_loader(&app, &store, &id, mirror).await
+}
+
+/// 原版走下载链。Forge/NeoForge 先运行其官方安装器，再补齐版本链里缺的文件。
+async fn install_with_loader(app: &tauri::AppHandle, store: &InstanceStore, id: &str, mirror: bool) -> Result<(), String> {
+    let inst = store.load(id).map_err(|e| e.to_string())?;
+    if (inst.loader == "forge" || inst.loader == "neoforge") && inst.launch_version.is_none() {
+        run_official_installer(app, store, &inst).await?;
+    }
+    let inst = store.load(id).map_err(|e| e.to_string())?;
+    install_chain(app, store, &inst, mirror).await
+}
+
+async fn run_official_installer(app: &tauri::AppHandle, store: &InstanceStore, inst: &Instance) -> Result<(), String> {
+    let loader_version = inst.loader_version.clone().filter(|s| !s.is_empty())
+        .ok_or_else(|| "没有选择加载器版本".to_string())?;
+    let urls = pomelo_core::loaders::installer_urls(&inst.loader, &inst.mc_version, &loader_version);
+    if urls.is_empty() {
+        return Err("这个加载器没有官方安装器".into());
+    }
+    let jar_path = store.instance_dir(&inst.id).join(format!("{}-{}-installer.jar", inst.loader, loader_version));
+    let _ = app.emit("install-progress", InstallProgress {
+        phase: "download".into(), current: 0, total: 1,
+        message: format!("下载 {} {} 安装器", inst.loader, loader_version),
+    });
+    let mut last_err = String::from("安装器下载失败");
+    let mut ok = false;
+    for url in &urls {
+        let item = DownloadItem { url: url.clone(), target: jar_path.clone(), sha1: None, size: None };
+        match Downloader::new(false, 1).download(&item).await {
+            Ok(_) => { ok = true; break; }
+            Err(e) => last_err = e.to_string(),
+        }
+    }
+    if !ok {
+        return Err(last_err);
+    }
+    let runtimes = scan_java();
+    let required = pomelo_core::java::required_java_major(&inst.mc_version).max(17);
+    let java = pomelo_core::java::select_java_major(&runtimes, required)
+        .or_else(|_| pomelo_core::java::select_java(&runtimes, &inst.mc_version))
+        .map_err(|e| e.to_string())?;
+    let game_dir = store.game_dir(&inst.id);
+    std::fs::create_dir_all(&game_dir).map_err(|e| e.to_string())?;
+    let _ = app.emit("install-progress", InstallProgress {
+        phase: "resolve".into(), current: 0, total: 1,
+        message: format!("运行 {} 官方安装器（Java {}）", inst.loader, java.major),
+    });
+    let jar_path2 = jar_path.clone();
+    let game_dir2 = game_dir.clone();
+    let java_path = java.path.clone();
+    let output = tauri::async_runtime::spawn_blocking(move || {
+        std::process::Command::new(java_path)
+            .arg("-jar")
+            .arg(&jar_path2)
+            .arg("--installClient")
+            .arg(&game_dir2)
+            .current_dir(&game_dir2)
+            .output()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("无法启动安装器：{e}"))?;
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr);
+        let out = String::from_utf8_lossy(&output.stdout);
+        let tail = if err.trim().is_empty() { out } else { err };
+        let tail: String = tail.chars().rev().take(500).collect::<String>().chars().rev().collect();
+        return Err(format!("官方安装器退出失败：{tail}"));
+    }
+    let versions = store.versions_dir(&inst.id);
+    let mut found = pomelo_core::loaders::installed_version_ids(&inst.loader, &inst.mc_version, &loader_version)
+        .into_iter()
+        .find(|id| versions.join(id).join(format!("{id}.json")).is_file());
+    if found.is_none() {
+        if let Ok(entries) = std::fs::read_dir(&versions) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.contains(&loader_version) && entry.path().join(format!("{name}.json")).is_file() {
+                    found = Some(name);
+                    break;
+                }
+            }
+        }
+    }
+    let version_id = found.ok_or_else(|| "安装器已结束，但没有找到版本 JSON".to_string())?;
+    let mut saved = store.load(&inst.id).map_err(|e| e.to_string())?;
+    saved.launch_version = Some(version_id);
+    store.save(&saved).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// 从 Modrinth 安装模组/资源包/光影到指定实例（真实下载）

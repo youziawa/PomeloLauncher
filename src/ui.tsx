@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { SkinViewer, WalkingAnimation } from 'skinview3d'
 import { IconKind, TagColor, TAG_COLORS } from './mock'
+import { blockForKind, blockForVersion } from './mcBlocks'
 import { fetchModrinthIcon, headUrl, skinUrl, preloadImage, makeSkinDataURL, isSkinRemoteDisabled, disableSkinRemote } from './net'
 import { useApp } from './store'
 
@@ -142,45 +143,16 @@ export function Empty({ icon = 'package', title, hint, action }: { icon?: string
   )
 }
 
-/* ---------------- 实例像素图标 ---------------- */
-export function InstanceIcon({ kind, size = 'md' }: { kind: IconKind; size?: 'lg' | 'md' | 'sm' | 'xs' }) {
+/* ---------------- 实例图标：官方方块材质 ---------------- */
+export function InstanceIcon({ kind, version, versionKind, size = 'md' }: {
+  kind: IconKind
+  version?: string
+  versionKind?: string
+  size?: 'lg' | 'md' | 'sm' | 'xs'
+}) {
   const cls = size === 'md' ? 'inst-icon' : `inst-icon ${size}`
-  return <div className={cls}><PixelArt kind={kind} /></div>
-}
-
-function PixelArt({ kind }: { kind: IconKind }) {
-  /* 16×16 像素画，几何绘制 */
-  const r = (x: number, y: number, w: number, h: number, f: string) => <rect key={`${x}-${y}-${w}-${h}`} x={x} y={y} width={w} height={h} fill={f} />
-  let cells: React.ReactNode[] = []
-  if (kind === 'grass' || kind === 'island') {
-    const sky = kind === 'island' ? '#BFE3F2' : '#DFF0C8'
-    cells.push(r(0, 0, 16, 16, sky))
-    const top = kind === 'island' ? 6 : 3
-    cells.push(r(2, top, 12, 2, '#8FBF4D'), r(2, top + 2, 12, 1, '#6E9A38'))
-    cells.push(r(2, top + 3, 12, 6, '#8A6244'), r(4, top + 4, 2, 2, '#75513A'), r(9, top + 6, 2, 1, '#75513A'), r(6, top + 7, 2, 1, '#9C7352'), r(11, top + 4, 1, 2, '#9C7352'))
-    if (kind === 'island') {
-      cells.push(r(7, 1, 2, 5, '#6E4F2E'), r(5, 0, 6, 2, '#5F8F35'), r(6, 2, 4, 1, '#6FA23F'))
-      cells.push(r(4, top + 9, 8, 1, '#75513A'), r(6, top + 10, 4, 1, '#6E4F2E'))
-    }
-  } else if (kind === 'gear') {
-    cells.push(r(0, 0, 16, 16, '#DCE6F2'))
-    cells.push(r(6, 1, 4, 2, '#5B7290'), r(6, 13, 4, 2, '#5B7290'), r(1, 6, 2, 4, '#5B7290'), r(13, 6, 2, 4, '#5B7290'))
-    cells.push(r(3, 3, 10, 10, '#6E87A6'), r(5, 5, 6, 6, '#DCE6F2'), r(6, 6, 4, 4, '#9FB4CC'))
-  } else if (kind === 'camera') {
-    cells.push(r(0, 0, 16, 16, '#F5E7C8'))
-    cells.push(r(2, 5, 12, 8, '#4A4A52'), r(5, 3, 4, 2, '#4A4A52'))
-    cells.push(r(6, 7, 4, 4, '#BFE3F2'), r(7, 8, 2, 2, '#5B7290'), r(12, 6, 1, 1, '#F2C14E'))
-  } else if (kind === 'clock') {
-    cells.push(r(0, 0, 16, 16, '#E8DDF2'))
-    cells.push(r(3, 2, 10, 12, '#8A6244'), r(4, 3, 8, 10, '#F5EFDC'))
-    cells.push(r(7, 4, 2, 5, '#4A3B2A'), r(8, 8, 3, 2, '#4A3B2A'), r(7, 11, 2, 1, '#C4453F'))
-  } else if (kind === 'bug') {
-    cells.push(r(0, 0, 16, 16, '#F7DDE4'))
-    cells.push(r(6, 3, 4, 2, '#8C3B52'), r(5, 5, 6, 7, '#C4453F'), r(7, 5, 2, 7, '#8C3B52'))
-    cells.push(r(3, 6, 2, 1, '#8C3B52'), r(11, 6, 2, 1, '#8C3B52'), r(3, 9, 2, 1, '#8C3B52'), r(11, 9, 2, 1, '#8C3B52'))
-    cells.push(r(6, 1, 1, 2, '#8C3B52'), r(9, 1, 1, 2, '#8C3B52'))
-  }
-  return <svg viewBox="0 0 16 16" shapeRendering="crispEdges">{cells}</svg>
+  const src = version ? blockForVersion(version, versionKind) : blockForKind(kind)
+  return <div className={cls}><img className="mc-block" src={src} alt="" draggable={false} /></div>
 }
 
 /* ---------------- 账户像素头像 ---------------- */

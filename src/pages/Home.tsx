@@ -61,7 +61,7 @@ export default function Home() {
         {/* 主启动面板 */}
         <section className="card hero-instance">
           <div className="hero-inst-top" onWheel={e => cycleInstance(e.deltaY > 0 ? 1 : -1)} title="滚动滚轮可快速切换实例">
-            <InstanceIcon kind={inst.icon} size="lg" />
+            <InstanceIcon kind={inst.icon} version={inst.mcVersion} size="lg" />
             <div className="meta">
               <div className="name">{inst.name}</div>
               <div className="chips">
@@ -182,7 +182,7 @@ export default function Home() {
             </div>
           ) : recent.map(i => (
             <button key={i.id} className="recent-card" onClick={() => app.setCurrentId(i.id)}>
-              <InstanceIcon kind={i.icon} size="sm" />
+              <InstanceIcon kind={i.icon} version={i.mcVersion} size="sm" />
               <span className="recent-txt">
                 <span className="t">{i.name}</span><br />
                 <span className="s num">{i.mcVersion} · {i.lastPlayed}</span>

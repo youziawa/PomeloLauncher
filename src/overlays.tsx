@@ -4,6 +4,7 @@ import { useApp } from './store'
 import { Icon, Logo, Modal, Select } from './ui'
 import { CRASH_INFO, uid, LoaderType } from './mock'
 import { isDesktop, listLoaderVersions, listVersions, LoaderBuild, DesktopVersion } from './desktop'
+import { blockForVersion } from './mcBlocks'
 
 /* ---------------- 首启向导（三步开玩） ---------------- */
 export function Wizard() {
@@ -147,8 +148,8 @@ const LOADERS: { id: LoaderType; hint: string; installs: boolean }[] = [
   { id: 'Vanilla', hint: '不安装加载器', installs: true },
   { id: 'Fabric', hint: '创建时安装所选版本', installs: true },
   { id: 'Quilt', hint: '创建时安装所选版本', installs: true },
-  { id: 'Forge', hint: '可选版本，安装器尚未接入', installs: false },
-  { id: 'NeoForge', hint: '可选版本，安装器尚未接入', installs: false },
+  { id: 'Forge', hint: '创建时运行 Forge 官方安装器', installs: true },
+  { id: 'NeoForge', hint: '创建时运行 NeoForge 官方安装器', installs: true },
 ]
 
 const DEMO_VERSIONS: DesktopVersion[] = [
@@ -299,7 +300,7 @@ export function NewInstanceModal() {
   const loaderMeta = LOADERS.find(l => l.id === loader)!
   const needsBuild = loader !== 'Vanilla'
   const canCreate = name.trim().length > 0 && !!ver && (!needsBuild || !!loaderVer) && buildState !== 'loading' && buildState !== 'error'
-  const actionLabel = loader === 'Fabric' || loader === 'Quilt' ? '创建并安装' : '创建实例'
+  const actionLabel = loader === 'Vanilla' ? '创建实例' : '创建并安装'
 
   return (
     <Modal title="新建实例" onClose={app.closeModal} className="new-inst"
@@ -330,6 +331,7 @@ export function NewInstanceModal() {
             {verState === 'ready' && shown.map(v => (
               <button key={v.id} type="button" role="option" aria-selected={v.id === ver}
                 className={`dl-item${v.id === ver ? ' active' : ''}`} onClick={() => pickVersion(v.id)}>
+                <img className="ver-ico" src={blockForVersion(v.id, v.kind)} alt="" draggable={false} />
                 <span className="num">{v.id}</span>
                 {v.latest && <span className="chip accent">最新</span>}
                 {v.kind !== 'release' && <span className="chip outline">{v.kind === 'snapshot' ? '快照' : v.kind === 'old_beta' ? 'Beta' : v.kind === 'old_alpha' ? 'Alpha' : v.kind}</span>}
@@ -372,8 +374,8 @@ export function NewInstanceModal() {
               ))}
             </div>
           )}
-          {!loaderMeta.installs && loader !== 'Vanilla' && (
-            <span className="hint">Forge / NeoForge 的版本可以先选好并记到实例上。一键安装目前支持原版、Fabric 和 Quilt。</span>
+          {(loader === 'Forge' || loader === 'NeoForge') && (
+            <span className="hint">会下载官方安装器并用本机 Java 执行，时间可能比原版安装更长。</span>
           )}
           {(loader === 'Fabric' || loader === 'Quilt') && (
             <span className="hint">点「创建并安装」会下载所选加载器和游戏文件，请保持网络可用。</span>

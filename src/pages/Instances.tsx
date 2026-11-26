@@ -62,7 +62,7 @@ function List() {
             <div key={i.id} className="card inst-tile" onClick={() => app.openDetail(i.id)} role="button" tabIndex={0}
               onKeyDown={e => { if (e.key === 'Enter') app.openDetail(i.id) }}>
               <div className="top">
-                <InstanceIcon kind={i.icon} size="sm" />
+                <InstanceIcon kind={i.icon} version={i.mcVersion} size="sm" />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="name">{i.name}</div>
                   <div className="muted small num">{i.mcVersion}</div>
@@ -114,7 +114,7 @@ function Detail({ id }: { id: string }) {
     <div>
       <div className="detail-head">
         <button className="iconbtn" onClick={() => app.openDetail(null)} aria-label="返回实例列表"><Icon name="chevron-left" /></button>
-        <InstanceIcon kind={inst.icon} size="sm" />
+        <InstanceIcon kind={inst.icon} version={inst.mcVersion} size="sm" />
         <div>
           <div className="name">{inst.name}</div>
           <div className="chips">

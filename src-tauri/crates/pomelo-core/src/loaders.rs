@@ -132,6 +132,40 @@ async fn list_bmcl(url: &str) -> Result<Vec<LoaderBuild>> {
         .collect())
 }
 
+/// 官方安装器下载地址：镜像在前，上游在后。只拼公开 Maven 坐标，不包含其他启动器的安装逻辑。
+pub fn installer_urls(loader: &str, mc: &str, loader_version: &str) -> Vec<String> {
+    match loader {
+        "forge" => {
+            let coord = format!("{mc}-{loader_version}");
+            let name = format!("forge-{coord}-installer.jar");
+            vec![
+                format!("https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/{coord}/{name}"),
+                format!("https://maven.minecraftforge.net/net/minecraftforge/forge/{coord}/{name}"),
+            ]
+        }
+        "neoforge" => {
+            let name = format!("neoforge-{loader_version}-installer.jar");
+            vec![
+                format!("https://bmclapi2.bangbang93.com/maven/net/neoforged/neoforge/{loader_version}/{name}"),
+                format!("https://maven.neoforged.net/releases/net/neoforged/neoforge/{loader_version}/{name}"),
+            ]
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// 安装器写入 versions/ 时常见的版本 id。按顺序探测。
+pub fn installed_version_ids(loader: &str, mc: &str, loader_version: &str) -> Vec<String> {
+    match loader {
+        "forge" => vec![
+            format!("{mc}-forge-{loader_version}"),
+            format!("{mc}-forge-{mc}-{loader_version}"),
+        ],
+        "neoforge" => vec![format!("neoforge-{loader_version}")],
+        _ => Vec::new(),
+    }
+}
+
 pub async fn list_for(loader: &str, game_version: &str) -> Result<Vec<LoaderBuild>> {
     match loader {
         "fabric" => list_meta_loaders(FABRIC_META, game_version).await,
@@ -145,6 +179,17 @@ pub async fn list_for(loader: &str, game_version: &str) -> Result<Vec<LoaderBuil
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn installer_urls_use_public_maven() {
+        let urls = installer_urls("forge", "1.20.1", "47.3.0");
+        assert!(urls[0].contains("bmclapi2.bangbang93.com"));
+        assert!(urls[1].ends_with("forge-1.20.1-47.3.0-installer.jar"));
+        let neo = installer_urls("neoforge", "1.21.1", "21.1.172");
+        assert!(neo[0].contains("/neoforge/21.1.172/neoforge-21.1.172-installer.jar"));
+        assert_eq!(installed_version_ids("forge", "1.20.1", "47.3.0")[0], "1.20.1-forge-47.3.0");
+        assert_eq!(installed_version_ids("neoforge", "1.21.1", "21.1.172")[0], "neoforge-21.1.172");
+    }
 
     #[test]
     fn newer_loader_sorts_first() {

@@ -593,12 +593,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setPage('instances')
           const verNote = loaderVersion ? ` ${loaderVersion}` : ''
           toast(
-            loader === 'Fabric' || loader === 'Quilt'
-              ? `实例「${name}」已创建，${loader}${verNote} 与游戏文件安装完成`
-              : loader === 'Forge' || loader === 'NeoForge'
-                ? `实例「${name}」已记下 ${loader}${verNote}。安装器还没接入，游戏文件需在实例页按原版安装`
-                : `实例「${name}」已创建 · 游戏文件需在实例页确认安装`,
-            loader === 'Forge' || loader === 'NeoForge' ? 'warning' : 'success',
+            loader === 'Vanilla'
+              ? `实例「${name}」已创建 · 游戏文件需在实例页确认安装`
+              : `实例「${name}」已创建，${loader}${verNote} 与游戏文件安装完成`,
+            'success',
           )
         } catch (e) {
           toast(`创建失败：${e}`, 'danger')
