@@ -119,6 +119,7 @@ POMELO_ROOT=D:/Project/PomeloLauncher/.m0-data ./src-tauri/app/target/release/po
 | 2026-11-26 16:06 | Cursor(grok-4.7) | 再清 Cargo debug/release 缓存、安装器日志和临时 jar | src-tauri 从约 2076MB 降到 43.4MB；exe 与 dll 仍在 | .m0-data 实测实例保留 |
 | 2026-11-26 16:33 | Cursor(grok-4.7) | Java 探测改为无窗口、小堆，并缓存扫描结果；删掉 hs_err 日志 | release 编译成功 | 连点侧边栏不应再闪终端 |
 | 2026-11-26 16:40 | Cursor(grok-4.7) | 离线账户默认皮肤改为 Mojang 官方 Steve/Alex 模板，创建时可二选一 | 皮肤文件 PNG 签名；tsc 通过；release 编译 | Alex 使用 slim 模型 |
+| 2026-11-26 16:56 | Cursor(grok-4.7) | 离线游戏名不再预填中文；输入中文时提示并禁止创建 | 前后端同一规则 | — |
 
 ## 7. 归档
 

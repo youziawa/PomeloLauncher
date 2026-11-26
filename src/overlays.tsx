@@ -5,13 +5,15 @@ import { Icon, Logo, Modal, Select } from './ui'
 import { CRASH_INFO, uid, LoaderType } from './mock'
 import { isDesktop, listLoaderVersions, listVersions, LoaderBuild, DesktopVersion } from './desktop'
 import { blockForVersion } from './mcBlocks'
+import { chineseNameWarning } from './accountName'
 
 /* ---------------- 首启向导（三步开玩） ---------------- */
 export function Wizard() {
   const app = useApp()
   const [step, setStep] = useState(0)
   const [mode, setMode] = useState<'ms' | 'offline'>('ms')
-  const [nick, setNick] = useState('柚子玩家')
+  const [nick, setNick] = useState('')
+  const nickWarning = chineseNameWarning(nick)
 
   const finish = () => {
     app.closeWizard()
@@ -61,10 +63,11 @@ export function Wizard() {
             <h1>起个游戏昵称</h1>
             <p className="lead">离线账户无法进入启用正版验证的服务器，其余功能完全一致。</p>
             <div className="field" style={{ marginBottom: 18 }}>
-              <input className="input" value={nick} onChange={e => setNick(e.target.value)} maxLength={16} style={{ fontSize: '1.1rem', padding: '10px 14px' }} />
-              <span className="hint">3–16 个字符，之后可以在账户页修改皮肤</span>
+              <input className="input" value={nick} onChange={e => setNick(e.target.value)} maxLength={16} placeholder="例如 Steve" style={{ fontSize: '1.1rem', padding: '10px 14px' }} />
+              <span className="hint">3–16 个字符。Minecraft 通常不能使用中文游戏名。</span>
+              {nickWarning && <span className="hint" style={{ color: 'var(--danger)' }}>{nickWarning}</span>}
             </div>
-            <button className="btn primary block lg" disabled={nick.trim().length < 3}
+            <button className="btn primary block lg" disabled={nick.trim().length < 3 || !!nickWarning}
               onClick={() => { app.addAccount({ id: uid('a'), name: nick.trim(), kind: 'offline', skin: 'steve' }); setStep(2) }}>
               继续
             </button>

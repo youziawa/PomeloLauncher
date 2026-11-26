@@ -789,6 +789,9 @@ fn add_offline_account(state: State<AppState>, name: String, skin: Option<String
     if name.chars().count() < 3 {
         return Err("昵称至少 3 个字符".into());
     }
+    if name.chars().any(|c| ('\u{3400}'..='\u{9fff}').contains(&c)) {
+        return Err("Minecraft 通常不能使用中文作为游戏名，请改用英文字母、数字或下划线".into());
+    }
     let mut accounts = load_accounts(&state.store.root).map_err(|e| e.to_string())?;
     if accounts.iter().any(|a| a.name == name) {
         return Err("该昵称已存在".into());
