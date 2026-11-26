@@ -130,7 +130,7 @@ pub fn scan_java() -> Vec<JavaRuntime> {
     out
 }
 
-/// MC 版本 → 所需 Java 大版本（按 Mojang 官方要求）
+/// MC 版本 → 所需 Java 大版本（按 Mojang 官方要求；26.x 起需要 Java 25）
 pub fn required_java_major(mc_version: &str) -> u32 {
     let v = mc_version.trim();
     // 远古版（b1.7.3 / a1.2.6）需要 Java 8
@@ -142,6 +142,9 @@ pub fn required_java_major(mc_version: &str) -> u32 {
         .filter_map(|p| p.split('-').next()?.parse::<u32>().ok())
         .collect();
     let (major, minor, patch) = (nums.first().copied().unwrap_or(1), nums.get(1).copied().unwrap_or(0), nums.get(2).copied().unwrap_or(0));
+    if major >= 26 {
+        return 25;
+    }
     if major > 1 {
         return 21;
     }
@@ -159,9 +162,8 @@ pub fn required_java_major(mc_version: &str) -> u32 {
     }
 }
 
-/// 选择 Java：优先精确匹配所需大版本，否则取“最低的满足要求版本”，最后回退最高版本。
-pub fn select_java<'a>(runtimes: &'a [JavaRuntime], mc_version: &str) -> Result<&'a JavaRuntime> {
-    let required = required_java_major(mc_version);
+/// 按指定 Java 大版本选择：精确匹配 → 最低满足 → 最高可用
+pub fn select_java_major(runtimes: &[JavaRuntime], required: u32) -> Result<&JavaRuntime> {
     if let Some(exact) = runtimes.iter().find(|r| r.major == required) {
         return Ok(exact);
     }
@@ -176,4 +178,9 @@ pub fn select_java<'a>(runtimes: &'a [JavaRuntime], mc_version: &str) -> Result<
         .iter()
         .max_by_key(|r| r.major)
         .ok_or_else(|| PomeloError::NotFound("未找到 Java 运行时，请安装 Java 21 或在其设置中指定路径".into()))
+}
+
+/// 选择 Java：优先精确匹配所需大版本，否则取“最低的满足要求版本”，最后回退最高版本。
+pub fn select_java<'a>(runtimes: &'a [JavaRuntime], mc_version: &str) -> Result<&'a JavaRuntime> {
+    select_java_major(runtimes, required_java_major(mc_version))
 }

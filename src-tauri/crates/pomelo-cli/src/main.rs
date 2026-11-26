@@ -157,7 +157,7 @@ async fn install(
     };
     println!("安装目标：{}（{}，MC {}）", inst.name, inst.id, inst.mc_version);
     let manifest_url = if mirror { meta::BMCLAPI_MANIFEST } else { meta::OFFICIAL_MANIFEST };
-    let chain = meta::load_version_chain(&store.versions_dir(&inst.id), &inst.mc_version, manifest_url).await?;
+    let chain = meta::load_version_chain(&store.versions_dir(&inst.id), &pomelo_core::instance::launch_id(&inst), manifest_url).await?;
     let resolved = meta::resolve_chain(&chain)?;
     println!("版本链：{} 层；mainClass={}", chain.len(), resolved.main_class);
 
@@ -175,7 +175,7 @@ async fn install(
 
     // 库
     for lib in meta::classpath_libraries(&resolved, &env) {
-        let Some(art) = lib.downloads.as_ref().and_then(|d| d.artifact.as_ref()) else { continue };
+        let Some(art) = meta::artifact_of(lib) else { continue };
         let rel = art.path.clone().or_else(|| meta::library_path(&lib.name)).context("无法推导库路径")?;
         items.push(DownloadItem {
             url: art.url.clone(),
@@ -252,7 +252,7 @@ async fn dl_fetch_json_fallback<T: serde::de::DeserializeOwned>(urls: &[String])
 async fn launch_instance(store: &InstanceStore, key: &str, name: &str, java: Option<PathBuf>, memory: u32, dry_run: bool) -> Result<()> {
     let inst = find_instance(store, key)?;
     let manifest_url = meta::OFFICIAL_MANIFEST;
-    let chain = meta::load_version_chain(&store.versions_dir(&inst.id), &inst.mc_version, manifest_url).await?;
+    let chain = meta::load_version_chain(&store.versions_dir(&inst.id), &pomelo_core::instance::launch_id(&inst), manifest_url).await?;
     let resolved = meta::resolve_chain(&chain)?;
     let env = Env::current();
 
@@ -260,7 +260,12 @@ async fn launch_instance(store: &InstanceStore, key: &str, name: &str, java: Opt
         Some(p) => p,
         None => {
             let runtimes = pomelo_core::java::scan_java();
-            pomelo_core::java::select_java(&runtimes, &inst.mc_version)?.path.clone()
+            let required = resolved
+                .java_version
+                .as_ref()
+                .map(|j| j.major_version)
+                .unwrap_or_else(|| pomelo_core::java::required_java_major(&inst.mc_version));
+            pomelo_core::java::select_java_major(&runtimes, required)?.path.clone()
         }
     };
 

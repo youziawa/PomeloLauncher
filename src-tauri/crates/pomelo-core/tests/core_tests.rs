@@ -36,6 +36,9 @@ fn lib(name: &str) -> Library {
             }),
             classifiers: HashMap::new(),
         }),
+        url: None,
+        sha1: None,
+        size: None,
         rules: vec![],
         natives: None,
         extract: None,
@@ -162,7 +165,7 @@ fn launch_arguments_substitution() {
     let inst = pomelo_core::instance::Instance {
         id: "i1".into(), name: "测试".into(), mc_version: "1.21.4".into(), loader: "vanilla".into(),
         loader_version: None, created_at: "2026-01-01T00:00:00Z".into(), memory_mb: 2048,
-        java_path: None, installed: true, last_played: None,
+        java_path: None, installed: true, last_played: None, launch_version: None,
     };
     let account = pomelo_core::auth::OfflineAccount::new("Steve");
     let args = build_arguments(&resolved, &paths, &inst, &account, 2048, false, &env).unwrap();

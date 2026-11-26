@@ -65,6 +65,8 @@ export const updateInstance = (id: string, memoryMb?: number, javaPath?: string)
   invoke<DesktopInstance>('update_instance', { id, memoryMb, javaPath })
 export const deleteInstance = (id: string) => invoke<void>('delete_instance', { id })
 export const installInstance = (id: string, mirror: boolean) => invoke<void>('install_instance', { id, mirror })
+export const installMod = (instanceId: string, slug: string, category: string) =>
+  invoke<string>('install_mod', { instanceId, slug, category })
 export const launchInstance = (id: string, offlineName: string, memory: number) =>
   invoke<number>('launch_instance', { id, offlineName, memory })
 export const stopGame = () => invoke<void>('stop_game')

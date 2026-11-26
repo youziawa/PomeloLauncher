@@ -6,9 +6,11 @@
 
 pub mod auth;
 pub mod error;
+pub mod fabric;
 pub mod instance;
 pub mod java;
 pub mod launch;
 pub mod meta;
+pub mod modrinth;
 
 pub use error::{PomeloError, Result};

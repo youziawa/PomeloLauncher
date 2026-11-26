@@ -98,12 +98,34 @@ pub struct Library {
     pub name: String,
     #[serde(default)]
     pub downloads: Option<LibraryDownloads>,
+    /// Fabric 等安装器profile使用 name+url(maven 基址)+sha1+size 形式
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub sha1: Option<String>,
+    #[serde(default)]
+    pub size: Option<u64>,
     #[serde(default)]
     pub rules: Vec<Rule>,
     #[serde(default)]
     pub natives: Option<HashMap<String, String>>,
     #[serde(default)]
     pub extract: Option<Extract>,
+}
+
+/// 统一取库的下载信息：优先 downloads.artifact，否则由 name+url 合成（Fabric profile 形式）
+pub fn artifact_of(lib: &Library) -> Option<Artifact> {
+    if let Some(a) = lib.downloads.as_ref().and_then(|d| d.artifact.as_ref()) {
+        return Some(a.clone());
+    }
+    let base = lib.url.as_ref()?;
+    let path = library_path(&lib.name)?;
+    Some(Artifact {
+        path: Some(path.clone()),
+        sha1: lib.sha1.clone(),
+        size: lib.size,
+        url: format!("{}{}", base.trim_end_matches('/'), format!("/{}", path)),
+    })
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]

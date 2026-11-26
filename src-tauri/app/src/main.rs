@@ -98,8 +98,36 @@ fn stop_game(state: State<AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn create_instance(state: State<AppState>, name: String, version: String, loader: String) -> Result<Instance, String> {
-    state.store.create(&name, &version, &loader).map_err(|e| e.to_string())
+async fn create_instance(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+    version: String,
+    loader: String,
+) -> Result<Instance, String> {
+    let store = store_of(&state);
+    let mut inst = store.create(&name, &version, &loader).map_err(|e| e.to_string())?;
+    if loader == "fabric" {
+        let (profile_id, profile) = pomelo_core::fabric::fabric_profile(&version)
+            .await
+            .map_err(|e| e.to_string())?;
+        let dir = store.versions_dir(&inst.id).join(&profile_id);
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        std::fs::write(dir.join(format!("{}.json", profile_id)), serde_json::to_vec_pretty(&profile).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+        inst.launch_version = Some(profile_id);
+        inst.loader_version = profile.libraries.iter().find_map(|l| {
+            if l.name.starts_with("net.fabricmc:fabric-loader:") {
+                Some(l.name.rsplit(':').next().unwrap_or("").to_string())
+            } else {
+                None
+            }
+        });
+        store.save(&inst).map_err(|e| e.to_string())?;
+        install_chain(&app, &store, &inst, true).await?;
+        inst = store.load(&inst.id).map_err(|e| e.to_string())?;
+    }
+    Ok(inst)
 }
 
 #[tauri::command]
@@ -169,20 +197,19 @@ async fn list_versions(limit: usize) -> Result<Vec<VersionInfo>, String> {
 
 /* ---------------- 安装 ---------------- */
 
-#[tauri::command]
-async fn install_instance(app: tauri::AppHandle, state: State<'_, AppState>, id: String, mirror: bool) -> Result<(), String> {
-    let store = store_of(&state);
-    let inst = store.load(&id).map_err(|e| e.to_string())?;
+/// 共享安装流水线：解析版本链 → 下载（进度事件）→ natives → 标记已安装
+async fn install_chain(app: &tauri::AppHandle, store: &InstanceStore, inst: &Instance, mirror: bool) -> Result<(), String> {
     let manifest_url = if mirror {
         pomelo_core::meta::BMCLAPI_MANIFEST
     } else {
         pomelo_core::meta::OFFICIAL_MANIFEST
     };
+    let launch_id = pomelo_core::instance::launch_id(inst);
     let _ = app.emit(
         "install-progress",
-        InstallProgress { phase: "resolve".into(), current: 0, total: 0, message: format!("解析版本 {}", inst.mc_version) },
+        InstallProgress { phase: "resolve".into(), current: 0, total: 0, message: format!("解析版本 {}", launch_id) },
     );
-    let chain = pomelo_core::meta::load_version_chain(&store.versions_dir(&inst.id), &inst.mc_version, manifest_url)
+    let chain = pomelo_core::meta::load_version_chain(&store.versions_dir(&inst.id), &launch_id, manifest_url)
         .await
         .map_err(|e| e.to_string())?;
     let resolved = pomelo_core::meta::resolve_chain(&chain).map_err(|e| e.to_string())?;
@@ -198,7 +225,7 @@ async fn install_instance(app: tauri::AppHandle, state: State<'_, AppState>, id:
         });
     }
     for lib in pomelo_core::meta::classpath_libraries(&resolved, &env) {
-        let Some(art) = lib.downloads.as_ref().and_then(|d| d.artifact.as_ref()) else { continue };
+        let Some(art) = pomelo_core::meta::artifact_of(lib) else { continue };
         let Some(rel) = art.path.clone().or_else(|| pomelo_core::meta::library_path(&lib.name)) else { continue };
         items.push(DownloadItem {
             url: art.url.clone(),
@@ -273,7 +300,6 @@ async fn install_instance(app: tauri::AppHandle, state: State<'_, AppState>, id:
         .await
         .map_err(|e| e.to_string())?;
 
-    // 旧版 natives（带 natives 映射的库）解压
     for (_, art) in pomelo_core::meta::native_artifacts(&resolved, &env) {
         if let Some(rel) = art.path.clone() {
             let jar = store.libraries_dir(&inst.id).join(rel);
@@ -282,7 +308,7 @@ async fn install_instance(app: tauri::AppHandle, state: State<'_, AppState>, id:
     }
 
     let mut done = store.load(&inst.id).map_err(|e| e.to_string())?;
-    done.installed = is_installed(&store, &done);
+    done.installed = is_installed(store, &done);
     store.save(&done).map_err(|e| e.to_string())?;
     let _ = app.emit(
         "install-progress",
@@ -299,6 +325,43 @@ async fn install_instance(app: tauri::AppHandle, state: State<'_, AppState>, id:
     Ok(())
 }
 
+#[tauri::command]
+async fn install_instance(app: tauri::AppHandle, state: State<'_, AppState>, id: String, mirror: bool) -> Result<(), String> {
+    let store = store_of(&state);
+    let inst = store.load(&id).map_err(|e| e.to_string())?;
+    install_chain(&app, &store, &inst, mirror).await
+}
+
+/// 从 Modrinth 安装模组/资源包/光影到指定实例（真实下载）
+#[tauri::command]
+async fn install_mod(state: State<'_, AppState>, instance_id: String, slug: String, category: String) -> Result<String, String> {
+    let store = store_of(&state);
+    let inst = store.load(&instance_id).map_err(|e| e.to_string())?;
+    let loader_filter = if category == "mod" && inst.loader != "vanilla" {
+        Some(inst.loader.as_str())
+    } else {
+        None
+    };
+    let version = pomelo_core::modrinth::latest_version(&slug, Some(&inst.mc_version), loader_filter)
+        .await
+        .map_err(|e| e.to_string())?;
+    let file = version.primary_file().ok_or_else(|| "该版本没有可下载文件".to_string())?;
+    let subdir = match category.as_str() {
+        "resourcepack" => "resourcepacks",
+        "shader" => "shaderpacks",
+        _ => "mods",
+    };
+    let target = store.game_dir(&inst.id).join(subdir).join(&file.filename);
+    let item = DownloadItem {
+        url: file.url.clone(),
+        target,
+        sha1: file.hashes.get("sha1").cloned(),
+        size: Some(file.size),
+    };
+    Downloader::new(true, 4).download(&item).await.map_err(|e| e.to_string())?;
+    Ok(file.filename.clone())
+}
+
 /* ---------------- 启动 ---------------- */
 
 #[tauri::command]
@@ -313,7 +376,7 @@ async fn launch_instance(
     let inst = store.load(&id).map_err(|e| e.to_string())?;
     let chain = pomelo_core::meta::load_version_chain(
         &store.versions_dir(&inst.id),
-        &inst.mc_version,
+        &pomelo_core::instance::launch_id(&inst),
         pomelo_core::meta::OFFICIAL_MANIFEST,
     )
     .await
@@ -325,7 +388,13 @@ async fn launch_instance(
         Some(p) if !p.trim().is_empty() => PathBuf::from(p),
         _ => {
             let runtimes = scan_java();
-            pomelo_core::java::select_java(&runtimes, &inst.mc_version)
+            // 优先采用版本 JSON 声明的 javaVersion（如 26.x 需要 Java 25）
+            let required = resolved
+                .java_version
+                .as_ref()
+                .map(|j| j.major_version)
+                .unwrap_or_else(|| pomelo_core::java::required_java_major(&inst.mc_version));
+            pomelo_core::java::select_java_major(&runtimes, required)
                 .map_err(|e| e.to_string())?
                 .path
                 .clone()
@@ -457,6 +526,7 @@ fn main() {
             delete_instance,
             open_data_dir,
             install_instance,
+            install_mod,
             launch_instance,
             list_accounts,
             add_offline_account,

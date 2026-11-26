@@ -27,6 +27,9 @@ pub struct Instance {
     pub installed: bool,
     #[serde(default)]
     pub last_played: Option<String>,
+    /// 实际启动的版本 id（Fabric 等加载器 profile）；None 表示原版 mc_version
+    #[serde(default)]
+    pub launch_version: Option<String>,
 }
 
 fn default_loader() -> String {
@@ -139,6 +142,7 @@ impl InstanceStore {
             java_path: None,
             installed: false,
             last_played: None,
+            launch_version: None,
         };
         std::fs::create_dir_all(self.game_dir(&inst.id))?;
         self.save(&inst)?;
@@ -182,7 +186,16 @@ pub fn is_installed(store: &InstanceStore, inst: &Instance) -> bool {
         .versions_dir(&inst.id)
         .join(&inst.mc_version)
         .join(format!("{}.json", inst.mc_version));
-    jar.exists() && json.exists()
+    let base_ok = jar.exists() && json.exists();
+    match &inst.launch_version {
+        Some(lv) => base_ok && store.versions_dir(&inst.id).join(lv).join(format!("{}.json", lv)).exists(),
+        None => base_ok,
+    }
+}
+
+/// 实例实际启动的版本 id
+pub fn launch_id(inst: &Instance) -> String {
+    inst.launch_version.clone().unwrap_or_else(|| inst.mc_version.clone())
 }
 
 pub fn ensure_dir(path: &Path) -> Result<()> {

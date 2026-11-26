@@ -158,6 +158,14 @@ a:hover { text-decoration: underline; }
 }
 .window.maximized { width: 100%; height: calc(100vh - 40px); max-height: none; border-radius: 8px; }
 
+/* 桌面模式：去掉 DEMO 的浮动窗口外壳，内容铺满原生窗口（修复底部多余边框） */
+.desktop.desktop-mode { padding: 0; background: var(--bg); min-height: 100vh; }
+.desktop-mode .window {
+  width: 100%; height: 100vh; max-height: none; min-height: 0;
+  border: none; border-radius: 0; box-shadow: none;
+}
+.desktop-mode .titlebar { border-radius: 0; }
+
 .titlebar {
   height: var(--titlebar-h); flex: none;
   display: flex; align-items: center; gap: 10px;
@@ -700,7 +708,9 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius
   .home-bottom { grid-template-columns: 1fr; }
   .recent-row { grid-template-columns: 1fr 1fr; }
   .window { height: calc(100vh - 24px); }
+  .desktop-mode .window { height: 100vh; }
   .desktop { padding: 12px; }
+  .desktop.desktop-mode { padding: 0; }
 }
 @media (max-width: 640px) {
   :root { --sidebar-w: 56px; --page-pad: 14px; }

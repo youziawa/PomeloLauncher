@@ -155,7 +155,10 @@ export function NewInstanceModal() {
           <label>模组加载器</label>
           <Select ariaLabel="模组加载器" width="100%" value={loader} onChange={v => setLoader(v as LoaderType)} options={
             app.desktop
-              ? [{ value: 'Vanilla', label: '原版（M1 接入 Fabric/Forge 安装器）' }]
+              ? [
+                { value: 'Vanilla', label: '原版（不安装加载器）' },
+                { value: 'Fabric', label: 'Fabric（创建时自动安装加载器与游戏文件）' },
+              ]
               : [
                 { value: 'Vanilla', label: '原版（不安装加载器）' },
                 { value: 'Fabric', label: 'Fabric（轻量，推荐新手）' },
@@ -164,7 +167,7 @@ export function NewInstanceModal() {
                 { value: 'Quilt', label: 'Quilt' },
               ]
           } />
-          <span className="hint">{app.desktop ? '桌面版当前仅支持原版；加载器安装将在 M1 接入' : 'OptiFine / LiteLoader 等将在正式版 M2 提供'}</span>
+          <span className="hint">{app.desktop ? 'Forge/NeoForge 安装器将在 M1 后续接入' : 'OptiFine / LiteLoader 等将在正式版 M2 提供'}</span>
         </div>
         <p className="muted small">创建后不会自动下载游戏文件；在实例页点击「安装游戏文件」并由你确认后才会开始下载。</p>
       </div>

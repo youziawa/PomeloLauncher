@@ -9,7 +9,8 @@ description = "PomeloLauncher 桌面外壳（Tauri 2，Windows 需 MSVC 工具�
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# custom-protocol：让 cargo build（含 release）嵌入 dist 产物而非连接 dev server
+tauri = { version = "2", features = ["custom-protocol"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }

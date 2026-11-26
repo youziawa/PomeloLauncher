@@ -52,8 +52,8 @@ function Shell() {
   }
 
   return (
-    <div className="desktop">
-      <div className={`window ${maximized ? 'maximized' : ''}`}>
+    <div className={`desktop${isDesktop() ? ' desktop-mode' : ''}`}>
+      <div className={`window${!isDesktop() && maximized ? ' maximized' : ''}`}>
         {/* 自定义标题栏 */}
         <div className="titlebar" data-tauri-drag-region
           onMouseDown={e => {

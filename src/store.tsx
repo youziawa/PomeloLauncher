@@ -9,6 +9,7 @@ import {
 import {
   isDesktop, getSystemInfo, listInstances as listDesktopInstances, listAccounts as listDesktopAccounts,
   addOfflineAccount, removeAccount as removeDesktopAccount, installInstance as installDesktopInstance,
+  installMod as installDesktopMod,
   launchInstance as launchDesktopInstance, stopGame as stopDesktopGame, onInstallProgress, onGameExit,
   updateInstance as updateDesktopInstance, listVersions,
   createInstance as createDesktopInstance,
@@ -425,8 +426,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const installResource = useCallback((res: ResourceItem, withDeps: boolean, targetId?: string) => {
     if (desktop) {
+      const target = instances.find(i => i.id === (targetId ?? currentId))
       setModal(null)
-      toast('桌面版：模组/资源安装将在 M2 接入（当前可通过 CLI 或继续使用浏览器演示）', 'warning')
+      if (!target) { toast('未选择目标实例', 'warning'); return }
+      if (res.category === 'modpack') { toast('整合包导入将在 M2 接入', 'warning'); return }
+      if (!res.slug) { toast('该资源暂无 Modrinth 官方源', 'warning'); return }
+      const taskId = `real-mod-${res.id}-${target.id}`
+      setRealTasks(ts => [
+        { id: taskId, name: `${res.zhName}（${res.name}）→ ${target.name}`, kind: res.category === 'mod' ? 'mod' : 'pack', sizeMB: 0, progress: 5, speedMBs: 0, status: 'downloading', source: 'Modrinth', instanceName: target.name },
+        ...ts.filter(t => t.id !== taskId),
+      ])
+      installDesktopMod(target.id, res.slug, res.category)
+        .then(fname => {
+          setRealTasks(ts => ts.map(t => t.id === taskId ? { ...t, progress: 100, status: 'done', name: `${fname} → ${target.name}` } : t))
+          toast(`已安装到 ${target.name}：${fname}`, 'success')
+        })
+        .catch(e => {
+          setRealTasks(ts => ts.map(t => t.id === taskId ? { ...t, status: 'error', error: String(e) } : t))
+          toast(`安装失败：${e}`, 'danger')
+        })
       return
     }
     const target = instances.find(i => i.id === (targetId ?? currentId))
@@ -491,7 +509,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setCurrentId(created.id)
           setModal(null)
           setPage('instances')
-          toast(`实例「${name}」已创建 · 游戏文件需在实例页确认安装`, 'success')
+          toast(
+            loader === 'Fabric'
+              ? `实例「${name}」已创建，Fabric 加载器与游戏文件安装完成`
+              : `实例「${name}」已创建 · 游戏文件需在实例页确认安装`,
+            'success',
+          )
         } catch (e) {
           toast(`创建失败：${e}`, 'danger')
         }
