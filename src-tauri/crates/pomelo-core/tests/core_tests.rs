@@ -220,6 +220,7 @@ fn required_java_mapping() {
     assert_eq!(required_java_major("1.20.4"), 17);
     assert_eq!(required_java_major("1.20.5"), 21);
     assert_eq!(required_java_major("1.21.4"), 21);
+    assert_eq!(required_java_major("26.3"), 25);
     assert_eq!(required_java_major("b1.7.3"), 8);
 }
 

@@ -51,7 +51,11 @@ cargo run                # 或运行 target/debug/pomelo-launcher.exe
 桌面端启动后，标题栏显示 `DESKTOP · 桌面版`，设置页「桌面核心」显示 Rust 核心连接状态、数据目录与 Java 列表（实机截图见 [docs/desktop/](docs/desktop/)）；浏览器中则为演示模式。
 
 桌面版已接通：真实实例列表/创建、用户确认安装（带进度事件）、离线账户、真实启动/结束游戏、日志查看、实时版本列表、窗口拖动/最小化/最大化/关闭。
+**M1 第一批**：Fabric 加载器安装（创建实例时选择）、Modrinth 真实模组/资源包/光影安装（选择目标实例）、Java 按版本 JSON 自动匹配（26.x → Java 25）。
 测试数据目录可用环境变量指定：`set POMELO_ROOT=D:\Project\PomeloLauncher\.m0-data` 后启动。
+
+> 构建注意：app crate 已启用 tauri `custom-protocol` feature，`cargo build --release` 直接嵌入 dist；
+> 若用 `cargo tauri dev` 开发前端请另起 vite（dev 模式行为以 Tauri CLI 为准）。
 
 ![桌面版首页（真实实例）](docs/desktop/home-real.png)
 ![游戏运行态](docs/desktop/running.png)
