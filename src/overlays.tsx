@@ -65,7 +65,7 @@ export function Wizard() {
               <span className="hint">3–16 个字符，之后可以在账户页修改皮肤</span>
             </div>
             <button className="btn primary block lg" disabled={nick.trim().length < 3}
-              onClick={() => { app.addAccount({ id: uid('a'), name: nick.trim(), kind: 'offline', skin: 'pomelo' }); setStep(2) }}>
+              onClick={() => { app.addAccount({ id: uid('a'), name: nick.trim(), kind: 'offline', skin: 'steve' }); setStep(2) }}>
               继续
             </button>
           </>

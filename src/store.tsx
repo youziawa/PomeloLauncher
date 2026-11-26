@@ -250,7 +250,7 @@ function mapDesktopAccount(a: DesktopAccount): Account {
     name: a.name,
     kind: a.kind === 'microsoft' ? 'microsoft' : a.kind === 'authlib' ? 'authlib' : 'offline',
     server: a.kind === 'authlib' ? '皮肤站' : undefined,
-    skin: a.kind === 'offline' ? 'pomelo' : 'steve',
+    skin: a.skin === 'alex' ? 'alex' : 'steve',
   }
 }
 
@@ -671,7 +671,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           toast('Microsoft / 皮肤站登录将在下个里程碑接入', 'warning')
           return
         }
-        addOfflineAccount(a.name)
+        addOfflineAccount(a.name, a.skin === 'alex' ? 'alex' : 'steve')
           .then(list => {
             const mapped = list.map(mapDesktopAccount)
             setAccounts(mapped)

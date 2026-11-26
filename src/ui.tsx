@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { SkinViewer, WalkingAnimation } from 'skinview3d'
 import { IconKind, TagColor, TAG_COLORS } from './mock'
 import { blockForKind, blockForVersion } from './mcBlocks'
+import { ClassicFace, classicSkinUrl } from './officialSkins'
 import { fetchModrinthIcon, headUrl, skinUrl, preloadImage, makeSkinDataURL, isSkinRemoteDisabled, disableSkinRemote } from './net'
 import { useApp } from './store'
 
@@ -186,15 +187,17 @@ export function Skin3D({ skin = 'steve', name, width = 92, height = 132 }: { ski
     viewer.zoom = 0.9
     viewer.autoRotate = !motionOff
     viewer.animation = motionOff ? null : new WalkingAnimation()
-    const fallback = makeSkinDataURL(skin)
-    const apply = (url: string) => { if (!disposed) viewer.loadSkin(url).catch(() => {}) }
+    const model = skin === 'alex' ? 'slim' : 'default'
+    const classic = skin === 'pomelo' ? makeSkinDataURL('pomelo') : classicSkinUrl(skin === 'alex' ? 'alex' : 'steve')
+    const apply = (url: string, slim: boolean) => {
+      if (!disposed) viewer.loadSkin(url, { model: slim ? 'slim' : 'default' }).catch(() => {})
+    }
+    apply(classic, model === 'slim')
     if (name && !isSkinRemoteDisabled()) {
       preloadImage(skinUrl(name)).then(u => {
         if (!u) disableSkinRemote()
-        if (!disposed) apply(u ?? fallback)
+        if (!disposed && u) apply(u, model === 'slim')
       })
-    } else {
-      apply(fallback)
     }
     return () => { disposed = true; viewer.dispose() }
   }, [skin, name, motionOff, width, height])
@@ -207,6 +210,9 @@ export function PlayerHead({ name, skin, size = 52 }: { name?: string; skin: 'st
   useEffect(() => setFailed(false), [name])
   const src = name ? headUrl(name, 64) : null
   if (!src || failed) {
+    if (skin === 'steve' || skin === 'alex') {
+      return <ClassicFace skin={skin} size={size} />
+    }
     return <div className="acc-head" style={{ width: size, height: size }}><SkinHead skin={skin} /></div>
   }
   return <img className="acc-head" style={{ width: size, height: size }} src={src} alt={`${name} 的头像`} onError={() => setFailed(true)} />

@@ -436,13 +436,20 @@ async fn run_official_installer(app: &tauri::AppHandle, store: &InstanceStore, i
     let game_dir2 = game_dir.clone();
     let java_path = java.path.clone();
     let output = tauri::async_runtime::spawn_blocking(move || {
-        std::process::Command::new(java_path)
-            .arg("-jar")
+        let mut cmd = std::process::Command::new(java_path);
+        cmd.arg("-jar")
             .arg(&jar_path2)
             .arg("--installClient")
             .arg(&game_dir2)
             .current_dir(&game_dir2)
-            .output()
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000);
+        }
+        cmd.output()
     })
     .await
     .map_err(|e| e.to_string())?
@@ -777,7 +784,7 @@ fn export_help_pack(state: State<AppState>, id: String) -> Result<String, String
 }
 
 #[tauri::command]
-fn add_offline_account(state: State<AppState>, name: String) -> Result<Vec<StoredAccount>, String> {
+fn add_offline_account(state: State<AppState>, name: String, skin: Option<String>) -> Result<Vec<StoredAccount>, String> {
     let name = name.trim().to_string();
     if name.chars().count() < 3 {
         return Err("昵称至少 3 个字符".into());
@@ -787,12 +794,17 @@ fn add_offline_account(state: State<AppState>, name: String) -> Result<Vec<Store
         return Err("该昵称已存在".into());
     }
     let acc = OfflineAccount::new(&name);
+    let skin = match skin.as_deref() {
+        Some("alex") => Some("alex".to_string()),
+        _ => Some("steve".to_string()),
+    };
     accounts.push(StoredAccount {
         name,
         uuid: acc.uuid,
         kind: "offline".into(),
         access_token: acc.access_token,
         refresh_token: None,
+        skin,
     });
     save_accounts(&state.store.root, &accounts).map_err(|e| e.to_string())?;
     Ok(accounts)

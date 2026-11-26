@@ -4,6 +4,21 @@ use crate::error::{PomeloError, Result};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Mutex;
+
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+/// 不弹出控制台窗口。从 GUI 进程拉起 java.exe 时，Windows 默认会闪一个终端。
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+fn hidden(program: &Path) -> Command {
+    let mut cmd = Command::new(program);
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd
+}
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct JavaRuntime {
@@ -40,9 +55,16 @@ pub fn probe_java(path: &Path) -> Option<JavaRuntime> {
     if !path.exists() {
         return None;
     }
-    let out = Command::new(path)
-        .arg("-XshowSettings:properties")
-        .arg("-version")
+    // 小堆 + 串行 GC：只读版本号，避免每个 java 都预留约 512MB，连点时把内存打爆并写出 hs_err。
+    let out = hidden(path)
+        .args([
+            "-Xms8m",
+            "-Xmx32m",
+            "-XX:+UseSerialGC",
+            "-XX:ErrorFile=NUL",
+            "-XshowSettings:properties",
+            "-version",
+        ])
         .output()
         .ok()?;
     let mut text = String::from_utf8_lossy(&out.stdout).to_string();
@@ -99,7 +121,19 @@ fn scan_common_dirs(candidates: &mut Vec<PathBuf>) {
 }
 
 /// 扫描本机 Java（PATH、JAVA_HOME、常见安装目录），去重后探测版本。
+/// 结果在进程内缓存：设置页每次打开都会调用，不能每次都再拉起一批 java.exe。
 pub fn scan_java() -> Vec<JavaRuntime> {
+    static CACHE: Mutex<Option<Vec<JavaRuntime>>> = Mutex::new(None);
+    let mut guard = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(cached) = guard.as_ref() {
+        return cached.clone();
+    }
+    let found = scan_java_uncached();
+    *guard = Some(found.clone());
+    found
+}
+
+fn scan_java_uncached() -> Vec<JavaRuntime> {
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Ok(java_home) = std::env::var("JAVA_HOME") {
         push_if_java(&mut candidates, PathBuf::from(java_home).join("bin").join(exe_name()));

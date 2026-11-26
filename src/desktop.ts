@@ -32,6 +32,7 @@ export interface DesktopAccount {
   kind: string
   access_token: string
   refresh_token?: string
+  skin?: string
 }
 
 export interface DesktopVersion {
@@ -82,7 +83,8 @@ export const stopGame = () => invoke<void>('stop_game')
 export const gameRunning = () => invoke<number | null>('game_running')
 export const readLog = (id: string, maxLines = 400) => invoke<string>('read_log', { id, maxLines })
 export const listAccounts = () => invoke<DesktopAccount[]>('list_accounts')
-export const addOfflineAccount = (name: string) => invoke<DesktopAccount[]>('add_offline_account', { name })
+export const addOfflineAccount = (name: string, skin?: 'steve' | 'alex') =>
+  invoke<DesktopAccount[]>('add_offline_account', { name, skin })
 export const removeAccount = (uuid: string) => invoke<DesktopAccount[]>('remove_account', { uuid })
 export const saveAccount = (account: DesktopAccount) => invoke<DesktopAccount[]>('save_account', { account })
 export const getMsClientId = () => invoke<string>('get_ms_client_id')

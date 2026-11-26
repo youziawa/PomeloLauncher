@@ -107,7 +107,7 @@ export const initialInstances: Instance[] = [
 export const initialAccounts: Account[] = [
   { id: 'a1', name: 'Steve_柚子', kind: 'microsoft', skin: 'steve' },
   { id: 'a2', name: '柚子酱', kind: 'authlib', server: 'LittleSkin', skin: 'alex' },
-  { id: 'a3', name: '离线玩家', kind: 'offline', skin: 'pomelo' },
+  { id: 'a3', name: '离线玩家', kind: 'offline', skin: 'steve' },
 ]
 
 export const initialMods: Record<string, Mod[]> = {

@@ -4,6 +4,7 @@ import { useApp } from '../store'
 import { Icon, SkinHead, Modal, PlayerHead } from '../ui'
 import { uid } from '../mock'
 import { msBrowserLogin, saveAccount } from '../desktop'
+import { ClassicFace, type ClassicSkin } from '../officialSkins'
 
 export default function Accounts() {
   const app = useApp()
@@ -81,6 +82,7 @@ function DesktopAddAccount() {
   const [phase, setPhase] = useState<'idle' | 'waiting' | 'error'>('idle')
   const [msg, setMsg] = useState('')
   const [nick, setNick] = useState('柚子玩家')
+  const [classic, setClassic] = useState<ClassicSkin>('steve')
 
   const start = async () => {
     setMsg('')
@@ -121,10 +123,19 @@ function DesktopAddAccount() {
           <div className="field" style={{ marginBottom: 12 }}>
             <label>游戏昵称</label>
             <input className="input" value={nick} onChange={e => setNick(e.target.value)} maxLength={16} placeholder="3–16 个字符" />
-            <span className="hint">离线模式无法进入启用正版验证的服务器；皮肤可本地自定义。</span>
+            <span className="hint">离线模式无法进入启用正版验证的服务器。皮肤使用 Steve 或 Alex 的官方默认皮肤。</span>
+          </div>
+          <div className="skin-pick" role="radiogroup" aria-label="默认皮肤">
+            {(['steve', 'alex'] as const).map(s => (
+              <button key={s} type="button" role="radio" aria-checked={classic === s}
+                className={`skin-opt${classic === s ? ' on' : ''}`} onClick={() => setClassic(s)}>
+                <ClassicFace skin={s} size={40} />
+                <span>{s === 'steve' ? 'Steve' : 'Alex'}</span>
+              </button>
+            ))}
           </div>
           <button className="btn primary block" disabled={nick.trim().length < 3}
-            onClick={() => { app.addAccount({ id: uid('a'), name: nick.trim(), kind: 'offline', skin: 'pomelo' }); app.closeModal() }}>
+            onClick={() => { app.addAccount({ id: uid('a'), name: nick.trim(), kind: 'offline', skin: classic }); app.closeModal() }}>
             创建离线账户
           </button>
         </div>
@@ -139,6 +150,7 @@ export function AddAccountModal() {
   const [msStep, setMsStep] = useState(0)
   const [authorizing, setAuthorizing] = useState(false)
   const [nick, setNick] = useState('柚子玩家')
+  const [classic, setClassic] = useState<ClassicSkin>('steve')
   const [server, setServer] = useState('https://littleskin.cn/api/yggdrasil')
   const [email, setEmail] = useState('')
   const [pwd, setPwd] = useState('')
@@ -198,13 +210,22 @@ export function AddAccountModal() {
           <div className="field" style={{ marginBottom: 12 }}>
             <label>游戏昵称</label>
             <input className="input" value={nick} onChange={e => setNick(e.target.value)} maxLength={16} placeholder="3–16 个字符" />
-            <span className="hint">离线模式无法进入启用正版验证的服务器；皮肤可本地自定义。</span>
+            <span className="hint">离线模式无法进入启用正版验证的服务器。皮肤使用 Steve 或 Alex 的官方默认皮肤。</span>
+          </div>
+          <div className="skin-pick" role="radiogroup" aria-label="默认皮肤">
+            {(['steve', 'alex'] as const).map(s => (
+              <button key={s} type="button" role="radio" aria-checked={classic === s}
+                className={`skin-opt${classic === s ? ' on' : ''}`} onClick={() => setClassic(s)}>
+                <ClassicFace skin={s} size={40} />
+                <span>{s === 'steve' ? 'Steve' : 'Alex'}</span>
+              </button>
+            ))}
           </div>
           <div className="card pad" style={{ background: 'var(--info-soft)', borderColor: 'transparent', marginBottom: 16 }}>
             <span className="small"><Icon name="info" size={14} /> 喜欢这个游戏？<a href="https://www.minecraft.net/zh-hans/store/minecraft-java-bedrock-edition-pc" target="_blank" rel="noreferrer">购买正版</a> 支持开发者，并解锁多人服务器与官方皮肤。</span>
           </div>
           <button className="btn primary block" disabled={nick.trim().length < 3}
-            onClick={() => { app.addAccount({ id: uid('a'), name: nick.trim(), kind: 'offline', skin: 'pomelo' }); app.closeModal() }}>
+            onClick={() => { app.addAccount({ id: uid('a'), name: nick.trim(), kind: 'offline', skin: classic }); app.closeModal() }}>
             创建离线账户
           </button>
         </div>

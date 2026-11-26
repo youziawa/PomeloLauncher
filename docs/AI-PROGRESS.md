@@ -1,7 +1,7 @@
 # AI 协作进度交接文档（AI-PROGRESS）
 
 > **本文件是所有参与本项目的 AI/代理的唯一进度权威来源。**
-> 最后更新：2026-11-26 16:06 (Asia/Shanghai) · 更新者：Cursor (grok-4.7)
+> 最后更新：2026-11-26 16:33 (Asia/Shanghai) · 更新者：Cursor (grok-4.7)
 > 配套强制约定见仓库根 [AGENTS.md](../AGENTS.md)（已被 DSH harness 作为工作区指令自动加载，实测生效）。
 
 ---
@@ -22,7 +22,7 @@
 ## 1. 当前状态
 
 - **阶段**：M1 进行中（M0 已完成并实测）。
-- **进行中**：无（Cursor 于 2026-11-26 16:06 清完编译缓存后空闲）。
+- **进行中**：无（Cursor 于 2026-11-26 16:33 修好连点侧边栏闪终端后空闲）。
 - **已完成且实测**：
   | 能力 | 证据 |
   | --- | --- |
@@ -89,6 +89,7 @@ POMELO_ROOT=D:/Project/PomeloLauncher/.m0-data ./src-tauri/app/target/release/po
 11. **编译缓存已清（2026-11-26）**：`src-tauri/target/debug`、`src-tauri/app/target/debug` 与两处 `release/build` 已删除。保留 `pomelo.exe`、`pomelo-launcher.exe`、`WebView2Loader.dll`（dll 必须留在 exe 旁）。下次 `cargo build` / `cargo test` 会全量重编。`.m0-data` 两个实测实例未动。
 12. **桌面 exe 必须是 GUI subsystem**：GNU 默认编出控制台程序（PE subsystem=3）。双击会弹出终端，关掉终端进程就退出。`main.rs` 已加 `#![windows_subsystem = "windows"]`；当前 release exe 已把 subsystem 改成 2。CLI `pomelo.exe` 保持控制台。
 13. **微软正版登录**：使用公开的 Minecraft 客户端 `00000000402b5328`，登录窗口拦截 `oauth20_desktop.srf` 的 code。MBI_SSL 令牌的 Xbox RpsTicket 不加 `d=` 前缀。用户不填客户端 ID、不抄设备码。
+14. **探测 Java 禁止弹控制台**：`probe_java` 必须 `CREATE_NO_WINDOW`，并限制堆（`-Xmx32m`）。否则从 GUI 拉起 `java.exe` 会闪终端；连点设置页会并行拉起多个 JVM，在 exe 目录写出 `hs_err_pid*.log`。扫描结果进程内缓存。
 
 ## 5. Backlog（按建议顺序）
 
@@ -116,6 +117,8 @@ POMELO_ROOT=D:/Project/PomeloLauncher/.m0-data ./src-tauri/app/target/release/po
 | 2026-11-26 11:28 | Cursor(grok-4.7) | 版本/实例默认图标换成 Minecraft Wiki 官方方块渲染，按版本年代区分 | 材质来自 minecraft.wiki/images | 嵌入桌面版后目视 |
 | 2026-11-26 11:38 | Cursor(grok-4.7) | Forge/NeoForge 创建时下载官方安装器并以 --installClient 装进实例目录 | installer URL 单测；NeoForge --help 确认参数；release 编译 | 未在本机完整跑完一次 Forge 安装 |
 | 2026-11-26 16:06 | Cursor(grok-4.7) | 再清 Cargo debug/release 缓存、安装器日志和临时 jar | src-tauri 从约 2076MB 降到 43.4MB；exe 与 dll 仍在 | .m0-data 实测实例保留 |
+| 2026-11-26 16:33 | Cursor(grok-4.7) | Java 探测改为无窗口、小堆，并缓存扫描结果；删掉 hs_err 日志 | release 编译成功 | 连点侧边栏不应再闪终端 |
+| 2026-11-26 16:40 | Cursor(grok-4.7) | 离线账户默认皮肤改为 Mojang 官方 Steve/Alex 模板，创建时可二选一 | 皮肤文件 PNG 签名；tsc 通过；release 编译 | Alex 使用 slim 模型 |
 
 ## 7. 归档
 

@@ -592,6 +592,9 @@ pub struct StoredAccount {
     pub access_token: String,
     #[serde(default)]
     pub refresh_token: Option<String>,
+    /// 离线账户皮肤：steve / alex。旧存档没有该字段时按 steve 显示。
+    #[serde(default)]
+    pub skin: Option<String>,
 }
 
 pub fn load_accounts(root: &Path) -> Result<Vec<StoredAccount>> {

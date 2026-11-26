@@ -166,11 +166,18 @@ pub fn spawn(java: &Path, args: &[String], game_dir: &Path) -> Result<Child> {
         return Err(PomeloError::Launch(format!("Java 不存在：{}", java.display())));
     }
     std::fs::create_dir_all(game_dir)?;
-    let child = Command::new(java)
-        .args(args)
+    let mut cmd = Command::new(java);
+    cmd.args(args)
         .current_dir(game_dir)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let child = cmd
         .spawn()
         .map_err(|e| PomeloError::Launch(format!("无法启动游戏进程：{}", e)))?;
     Ok(child)
